@@ -1,19 +1,46 @@
-﻿FROM node:18-alpine
+﻿# ----------------------
+# Stage 1: Build
+# ----------------------
+FROM node:18-alpine AS builder
 
-RUN apk add --no-cache openssl python3 make g++
+# Install tools necessari per compilare
+RUN apk add --no-cache python3 make g++ git
+
+# Working directory
+WORKDIR /app
+
+# Copia solo package.json e package-lock.json prima per caching layer
+COPY package*.json ./
+
+# Installa tutte le dipendenze (dev incluse)
+RUN npm ci --legacy-peer-deps --include=dev
+
+# Prisma generate
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Copia tutto il resto del progetto
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# ----------------------
+# Stage 2: Produzione
+# ----------------------
+FROM node:18-alpine
 
 WORKDIR /app
 
+# Copia solo le dipendenze di produzione
 COPY package*.json ./
-COPY prisma ./prisma
+RUN npm ci --only=production --legacy-peer-deps
 
-RUN npm ci --legacy-peer-deps
-RUN npx prisma generate
+# Copia la build dallo stage precedente
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/prisma ./prisma
 
-COPY . .
-
-RUN npm run build
-
+# Porta e comando di avvio
 EXPOSE 3000
-
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["node", "dist/main.js"]
