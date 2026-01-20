@@ -57,7 +57,7 @@ async function main() {
   });
 
   // ===========================
-  // COMMISSION PLAN + IB
+  // COMMISSION PLAN
   // ===========================
   const commissionPlan = await prisma.commissionPlan.upsert({
     where: { id: 'DEFAULT_PLAN' },
@@ -65,11 +65,15 @@ async function main() {
     create: { 
       id: 'DEFAULT_PLAN', 
       name: 'Default Plan', 
-      basePercentage: new Decimal(0.001), // 0.1%
-      volumeBonus: new Decimal(0) 
+      description: 'Default commission plan for IBs',
+      basePercentage: new Decimal('0.001'), // 0.1%
+      volumeBonus: new Decimal('0') 
     },
   });
 
+  // ===========================
+  // INTRODUCING BROKER (usa commissionPlan come stringa)
+  // ===========================
   const ib = await prisma.introducingBroker.upsert({
     where: { id: 'IB_1' },
     update: {},
@@ -77,7 +81,7 @@ async function main() {
       id: 'IB_1', 
       name: 'IB_1',
       email: ibUser.email, 
-      commissionPlan: 'DEFAULT_PLAN',
+      commissionPlan: 'DEFAULT_PLAN', // STRINGA, non relazione
       isActive: true
     },
   });
@@ -120,11 +124,11 @@ async function main() {
     create: {
       id: 'CLIENT_REAL_WALLET',
       accountId: clientReal.id,
-      balance: new Decimal(0),
-      available: new Decimal(0),
-      marginUsed: new Decimal(0),
-      equity: new Decimal(0),
-      freeMargin: new Decimal(0),
+      balance: new Decimal('0'),
+      available: new Decimal('0'),
+      marginUsed: new Decimal('0'),
+      equity: new Decimal('0'),
+      freeMargin: new Decimal('0'),
     },
   });
 
@@ -134,16 +138,16 @@ async function main() {
     create: {
       id: 'CLIENT_DEMO_WALLET',
       accountId: clientDemo.id,
-      balance: new Decimal(10000),
-      available: new Decimal(10000),
-      marginUsed: new Decimal(0),
-      equity: new Decimal(10000),
-      freeMargin: new Decimal(10000),
+      balance: new Decimal('10000'),
+      available: new Decimal('10000'),
+      marginUsed: new Decimal('0'),
+      equity: new Decimal('10000'),
+      freeMargin: new Decimal('10000'),
     },
   });
 
   // ===========================
-  // MARKETS + LIQUIDATION
+  // MARKETS
   // ===========================
   const marketsData = [
     { symbol: 'EURUSD', type: 'FOREX', spread: 0.2, swapLong: -1.2, swapShort: 0.8, id: 'EURUSD' },
@@ -156,7 +160,15 @@ async function main() {
     await prisma.market.upsert({
       where: { id: m.id },
       update: {},
-      create: { ...m },
+      create: { 
+        id: m.id,
+        symbol: m.symbol, 
+        name: m.symbol,
+        type: m.type, 
+        spread: m.spread, 
+        swapLong: m.swapLong, 
+        swapShort: m.swapShort 
+      },
     });
   }
 
@@ -173,7 +185,13 @@ async function main() {
     await prisma.legalContent.upsert({
       where: { id: item.type },
       update: {},
-      create: { id: item.type, ...item, version: 1 },
+      create: { 
+        id: item.type, 
+        type: item.type,
+        title: item.title, 
+        content: item.content, 
+        version: 1 
+      },
     });
   }
 
@@ -189,8 +207,8 @@ async function main() {
       activeClients: 1,
       totalAccounts: 2,
       totalTrades: 0,
-      totalVolume: new Decimal(0),
-      totalCommission: new Decimal(0),
+      totalVolume: new Decimal('0'),
+      totalCommission: new Decimal('0'),
       activeAccounts: 2,
     },
   });
@@ -203,8 +221,8 @@ async function main() {
     update: {},
     create: {
       id: 'INITIAL_DEPOSIT_CLIENT_REAL',
-      walletId: clientRealWallet.id, // Usa l'ID del wallet
-      amount: new Decimal(1000),
+      walletId: clientRealWallet.id,
+      amount: new Decimal('1000'),
       method: 'Initial deposit',
       status: DepositStatus.APPROVED,
       approvedBy: admin.email,
@@ -215,10 +233,10 @@ async function main() {
   await prisma.wallet.update({
     where: { id: clientRealWallet.id },
     data: {
-      balance: { increment: new Decimal(1000) },
-      available: { increment: new Decimal(1000) },
-      equity: { increment: new Decimal(1000) },
-      freeMargin: { increment: new Decimal(1000) },
+      balance: new Decimal('1000'),
+      available: new Decimal('1000'),
+      equity: new Decimal('1000'),
+      freeMargin: new Decimal('1000'),
     },
   });
 
@@ -226,7 +244,7 @@ async function main() {
   // OPEN INITIAL TRADES (REAL ACCOUNT)
   // ===========================
   for (const m of marketsData) {
-    const tradeId = `TRADE_${m.id}_1`;
+    const tradeId = `TRADE_${m.symbol}_1`;
     await prisma.trade.upsert({
       where: { id: tradeId },
       update: {},
@@ -237,10 +255,10 @@ async function main() {
         symbol: m.symbol,
         type: TradeType.BUY,
         status: TradeStatus.OPEN,
-        volume: new Decimal(0.01), // Volume più realistico
-        price: new Decimal(1.1), // Prezzo più realistico
-        entryPrice: new Decimal(1.1),
-        pnl: new Decimal(0),
+        volume: new Decimal('0.01'),
+        price: new Decimal('1.1'),
+        entryPrice: new Decimal('1.1'),
+        pnl: new Decimal('0'),
       },
     });
 
@@ -250,7 +268,7 @@ async function main() {
       create: {
         id: tradeId,
         symbol: m.symbol,
-        price: new Decimal(1.1),
+        price: new Decimal('1.1'),
         timestamp: new Date(),
       },
     });
@@ -283,7 +301,7 @@ async function main() {
     },
   });
 
-  console.log('🔥 SEED OPERATIVO DEFINITIVO COMPLETO! Puoi andare live!');
+  console.log('🔥 SEED OPERATIVO DEFINITIVO COMPLETO!');
 }
 
 main()

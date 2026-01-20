@@ -18,10 +18,9 @@ async function bootstrap() {
     }),
   );
 
- const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+  const PORT = process.env.PORT || 3000;
+  await app.listen(PORT); // AGGIUNGI 'await' QUI
+  console.log(`🚀 IGFXPRO API running on port ${PORT}`);
 }
 
 bootstrap();

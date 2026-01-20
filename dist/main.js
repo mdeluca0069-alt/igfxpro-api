@@ -14,10 +14,9 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
         transform: true,
     }));
-    const PORT = process.env.PORT || 4000;
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+    const PORT = process.env.PORT || 3000;
+    await app.listen(PORT);
+    console.log(`🚀 IGFXPRO API running on port ${PORT}`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map
