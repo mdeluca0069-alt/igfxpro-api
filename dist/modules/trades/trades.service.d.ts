@@ -7,18 +7,18 @@ export declare class TradesService {
             id: string;
             status: import(".prisma/client").$Enums.AccountStatus;
             createdAt: Date;
+            userId: string;
             type: import(".prisma/client").$Enums.AccountType;
             currency: string;
             leverage: number;
-            userId: string;
         };
         market: {
             symbol: string;
             id: string;
-            name: string | null;
             createdAt: Date;
-            updatedAt: Date;
             type: string | null;
+            name: string | null;
+            updatedAt: Date;
             spread: number;
             swapLong: number;
             swapShort: number;
@@ -46,18 +46,18 @@ export declare class TradesService {
             id: string;
             status: import(".prisma/client").$Enums.AccountStatus;
             createdAt: Date;
+            userId: string;
             type: import(".prisma/client").$Enums.AccountType;
             currency: string;
             leverage: number;
-            userId: string;
         };
         market: {
             symbol: string;
             id: string;
-            name: string | null;
             createdAt: Date;
-            updatedAt: Date;
             type: string | null;
+            name: string | null;
+            updatedAt: Date;
             spread: number;
             swapLong: number;
             swapShort: number;

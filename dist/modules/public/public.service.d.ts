@@ -16,10 +16,10 @@ export declare class PublicService {
     getMarkets(): Promise<{
         symbol: string;
         id: string;
-        name: string | null;
         createdAt: Date;
-        updatedAt: Date;
         type: string | null;
+        name: string | null;
+        updatedAt: Date;
         spread: number;
         swapLong: number;
         swapShort: number;

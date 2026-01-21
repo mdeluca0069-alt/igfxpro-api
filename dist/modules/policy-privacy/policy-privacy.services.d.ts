@@ -5,8 +5,8 @@ export declare class LegalService {
     getContent(type: 'disclaimer' | 'policy' | 'terms'): Promise<{
         id: string;
         createdAt: Date;
-        updatedAt: Date;
         type: string;
+        updatedAt: Date;
         title: string;
         content: string;
         version: number;

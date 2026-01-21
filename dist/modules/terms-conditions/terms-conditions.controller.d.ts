@@ -5,8 +5,8 @@ export declare class TermsConditionsController {
     getTerms(): Promise<{
         id: string;
         createdAt: Date;
-        updatedAt: Date;
         type: string;
+        updatedAt: Date;
         title: string;
         content: string;
         version: number;

@@ -23,11 +23,13 @@ let AuthService = class AuthService {
         const user = await this.prisma.user.findUnique({
             where: { email: dto.email },
         });
-        if (!user)
+        if (!user) {
             throw new common_1.UnauthorizedException('Credenziali non valide');
+        }
         const passwordValid = await bcrypt.compare(dto.password, user.password);
-        if (!passwordValid)
+        if (!passwordValid) {
             throw new common_1.UnauthorizedException('Credenziali non valide');
+        }
         const role = user.role;
         const payload = { sub: user.id, email: user.email, role };
         return {

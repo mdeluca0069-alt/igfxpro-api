@@ -4,10 +4,10 @@ export declare class LedgerController {
     constructor(ledgerService: LedgerService);
     getLedger(walletId: string): Promise<{
         id: string;
-        createdAt: Date;
-        type: import(".prisma/client").$Enums.LedgerType;
         amount: import("@prisma/client/runtime/library").Decimal;
+        createdAt: Date;
         walletId: string;
+        type: import(".prisma/client").$Enums.LedgerType;
         reference: string | null;
     }[]>;
     createEntry(body: {
@@ -17,10 +17,10 @@ export declare class LedgerController {
         reference?: string;
     }): Promise<{
         id: string;
-        createdAt: Date;
-        type: import(".prisma/client").$Enums.LedgerType;
         amount: import("@prisma/client/runtime/library").Decimal;
+        createdAt: Date;
         walletId: string;
+        type: import(".prisma/client").$Enums.LedgerType;
         reference: string | null;
     }>;
 }

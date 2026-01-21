@@ -13,39 +13,39 @@ export declare class WalletService {
     checkAvailable(accountId: string, requiredAmount: number): Promise<boolean>;
     updateWalletBalance(accountId: string, amountChange: number, marginChange?: number): Promise<{
         id: string;
+        accountId: string;
         balance: Decimal;
         available: Decimal;
         marginUsed: Decimal;
         equity: Decimal;
         freeMargin: Decimal;
-        accountId: string;
     }>;
     getLedger(accountId: string): Promise<{
         id: string;
-        createdAt: Date;
-        type: import(".prisma/client").$Enums.LedgerType;
         amount: Decimal;
+        createdAt: Date;
         walletId: string;
+        type: import(".prisma/client").$Enums.LedgerType;
         reference: string | null;
     }[]>;
     getTransactions(accountId: string): Promise<{
         deposits: {
             id: string;
-            status: import(".prisma/client").$Enums.DepositStatus;
-            createdAt: Date;
             amount: Decimal;
-            method: string;
+            status: import(".prisma/client").$Enums.DepositStatus;
             approvedBy: string | null;
             approvedAt: Date | null;
+            createdAt: Date;
             walletId: string;
+            method: string;
         }[];
         withdrawals: {
             id: string;
-            status: import(".prisma/client").$Enums.WithdrawalStatus;
-            createdAt: Date;
             amount: Decimal;
+            status: import(".prisma/client").$Enums.WithdrawalStatus;
             approvedBy: string | null;
             approvedAt: Date | null;
+            createdAt: Date;
             walletId: string;
         }[];
     }>;

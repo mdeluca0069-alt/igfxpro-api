@@ -1,0 +1,12 @@
+{
+  "name": "igfxpro-api",
+  "services": [
+    {
+      "name": "api",
+      "dockerfilePath": "./Dockerfile",
+      "port": 3000,
+      "envPath": ".env.production"
+    }
+  ]
+}
+

@@ -23,7 +23,7 @@
       - "3000:3000"  
     depends_on:
       - db
-    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+    command: sh -c "node dist/main.js"
 
 volumes:
   postgres_data:

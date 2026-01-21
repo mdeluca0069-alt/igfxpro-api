@@ -12,53 +12,53 @@ export declare class DepositsService {
         message: string;
         deposit: {
             id: string;
-            status: import(".prisma/client").$Enums.DepositStatus;
-            createdAt: Date;
             amount: Decimal;
-            method: string;
+            status: import(".prisma/client").$Enums.DepositStatus;
             approvedBy: string | null;
             approvedAt: Date | null;
+            createdAt: Date;
             walletId: string;
+            method: string;
         };
     }>;
     getUserDeposits(userId: string): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }[]>;
     getPendingDeposits(): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }[]>;
     approveDeposit(id: string, userId: string): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }>;
     rejectDeposit(id: string, userId: string, reason?: string): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }>;
 }

@@ -12,14 +12,9 @@ const client_1 = require("@prisma/client");
 let PrismaService = class PrismaService extends client_1.PrismaClient {
     async onModuleInit() {
         await this.$connect();
-        console.log('🟢 Prisma connected');
     }
-    async onApplicationShutdown(signal) {
+    async onModuleDestroy() {
         await this.$disconnect();
-        console.log('🔴 Prisma disconnected');
-    }
-    async transaction(fn) {
-        return this.$transaction(fn);
     }
 };
 exports.PrismaService = PrismaService;

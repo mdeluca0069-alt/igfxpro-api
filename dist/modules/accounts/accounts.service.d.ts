@@ -7,68 +7,68 @@ export declare class AccountsService {
     createAccount(userId: string, type: AccountType, currency: string, leverage: number): Promise<{
         wallet: {
             id: string;
+            accountId: string;
             balance: Decimal;
             available: Decimal;
             marginUsed: Decimal;
             equity: Decimal;
             freeMargin: Decimal;
-            accountId: string;
         };
     } & {
         id: string;
         status: import(".prisma/client").$Enums.AccountStatus;
         createdAt: Date;
+        userId: string;
         type: import(".prisma/client").$Enums.AccountType;
         currency: string;
         leverage: number;
-        userId: string;
     }>;
     getAccountsByUser(userId: string): Promise<({
         wallet: {
             id: string;
+            accountId: string;
             balance: Decimal;
             available: Decimal;
             marginUsed: Decimal;
             equity: Decimal;
             freeMargin: Decimal;
-            accountId: string;
         };
     } & {
         id: string;
         status: import(".prisma/client").$Enums.AccountStatus;
         createdAt: Date;
+        userId: string;
         type: import(".prisma/client").$Enums.AccountType;
         currency: string;
         leverage: number;
-        userId: string;
     })[]>;
     getAllAccounts(): Promise<({
-        user: {
-            id: string;
-            email: string;
-            password: string;
-            name: string | null;
-            role: import(".prisma/client").$Enums.RoleName;
-            status: import(".prisma/client").$Enums.UserStatus;
-            createdAt: Date;
-            updatedAt: Date;
-        };
         wallet: {
             id: string;
+            accountId: string;
             balance: Decimal;
             available: Decimal;
             marginUsed: Decimal;
             equity: Decimal;
             freeMargin: Decimal;
-            accountId: string;
+        };
+        user: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            name: string | null;
+            email: string;
+            password: string;
+            role: import(".prisma/client").$Enums.RoleName;
+            updatedAt: Date;
         };
     } & {
         id: string;
         status: import(".prisma/client").$Enums.AccountStatus;
         createdAt: Date;
+        userId: string;
         type: import(".prisma/client").$Enums.AccountType;
         currency: string;
         leverage: number;
-        userId: string;
     })[]>;
 }

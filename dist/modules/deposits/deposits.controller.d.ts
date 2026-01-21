@@ -10,55 +10,55 @@ export declare class DepositsController {
         message: string;
         deposit: {
             id: string;
-            status: import(".prisma/client").$Enums.DepositStatus;
-            createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            method: string;
+            status: import(".prisma/client").$Enums.DepositStatus;
             approvedBy: string | null;
             approvedAt: Date | null;
+            createdAt: Date;
             walletId: string;
+            method: string;
         };
     }>;
     getMyDeposits(req: any): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: import("@prisma/client/runtime/library").Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }[]>;
     getPendingDeposits(): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: import("@prisma/client/runtime/library").Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }[]>;
     approveDeposit(id: string, req: any): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: import("@prisma/client/runtime/library").Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }>;
     rejectDeposit(id: string, req: any, body: {
         reason?: string;
     }): Promise<{
         id: string;
-        status: import(".prisma/client").$Enums.DepositStatus;
-        createdAt: Date;
         amount: import("@prisma/client/runtime/library").Decimal;
-        method: string;
+        status: import(".prisma/client").$Enums.DepositStatus;
         approvedBy: string | null;
         approvedAt: Date | null;
+        createdAt: Date;
         walletId: string;
+        method: string;
     }>;
 }

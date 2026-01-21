@@ -16,10 +16,15 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user) throw new UnauthorizedException('Credenziali non valide');
+    if (!user) {
+      throw new UnauthorizedException('Credenziali non valide');
+    }
 
+    // Confronto password con bcryptjs
     const passwordValid = await bcrypt.compare(dto.password, user.password);
-    if (!passwordValid) throw new UnauthorizedException('Credenziali non valide');
+    if (!passwordValid) {
+      throw new UnauthorizedException('Credenziali non valide');
+    }
 
     const role: RoleName = user.role;
 
@@ -31,7 +36,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role,
-        permissions: [],
+        permissions: [], // aggiungi se hai ruoli/permessi
       },
     };
   }

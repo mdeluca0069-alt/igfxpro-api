@@ -7,19 +7,19 @@ export declare class AdminController {
             id: string;
             status: import(".prisma/client").$Enums.AccountStatus;
             createdAt: Date;
+            userId: string;
             type: import(".prisma/client").$Enums.AccountType;
             currency: string;
             leverage: number;
-            userId: string;
         }[];
     } & {
         id: string;
-        email: string;
-        password: string;
-        name: string | null;
-        role: import(".prisma/client").$Enums.RoleName;
         status: import(".prisma/client").$Enums.UserStatus;
         createdAt: Date;
+        name: string | null;
+        email: string;
+        password: string;
+        role: import(".prisma/client").$Enums.RoleName;
         updatedAt: Date;
     })[]>;
     getUser(id: string): Promise<{
@@ -27,19 +27,19 @@ export declare class AdminController {
             id: string;
             status: import(".prisma/client").$Enums.AccountStatus;
             createdAt: Date;
+            userId: string;
             type: import(".prisma/client").$Enums.AccountType;
             currency: string;
             leverage: number;
-            userId: string;
         }[];
     } & {
         id: string;
-        email: string;
-        password: string;
-        name: string | null;
-        role: import(".prisma/client").$Enums.RoleName;
         status: import(".prisma/client").$Enums.UserStatus;
         createdAt: Date;
+        name: string | null;
+        email: string;
+        password: string;
+        role: import(".prisma/client").$Enums.RoleName;
         updatedAt: Date;
     }>;
 }
