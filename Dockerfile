@@ -1,42 +1,35 @@
-﻿# ----------------------
-# BUILD STAGE
-# ----------------------
-FROM node:18-alpine AS builder
+﻿# Fase builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
-
-RUN apk add --no-cache openssl python3 make g++
 
 COPY package*.json ./
 COPY prisma ./prisma
 
-# installa TUTTO (dev + prod)
+# Installa tutte le dipendenze (inclusi dev per prisma)
 RUN npm ci --legacy-peer-deps
 
+# Genera client prisma
 RUN npx prisma generate
 
 COPY . .
-
 RUN npm run build
 
-
-# ----------------------
-# PRODUCTION STAGE
-# ----------------------
-FROM node:18-alpine
+# Fase produzione
+FROM node:20-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
 COPY prisma ./prisma
 
-RUN npm ci --omit=dev --legacy-peer-deps
+# Solo dipendenze di produzione (--ignore-scripts per evitare prisma generate che fallisce senza @prisma/client)
+RUN npm ci --omit=dev --legacy-peer-deps --ignore-scripts
 
-# Prisma client
+# Copia prisma client dal builder
 COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma /app/node_modules/@prisma
 
-# Build TS
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000

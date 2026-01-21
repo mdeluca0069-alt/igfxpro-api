@@ -20,7 +20,7 @@
       NODE_ENV: production
       DATABASE_URL: postgres://igfxpro_user:StrongPassword123!@db:5432/igfxpro
     ports:
-      - "4000:4000"  # IMPORTANTE: porta 4000 invece di 3000
+      - "3000:3000"  
     depends_on:
       - db
     command: sh -c "npx prisma migrate deploy && node dist/main.js"
