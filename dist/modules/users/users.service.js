@@ -13,13 +13,13 @@ exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const client_1 = require("@prisma/client");
-const bcrypt = require("bcryptjs");
+const bcryptjs_1 = require("bcryptjs");
 let UsersService = class UsersService {
     constructor(prisma) {
         this.prisma = prisma;
     }
     async createUser(email, password, role = client_1.RoleName.CLIENT) {
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         return this.prisma.user.create({
             data: {
                 email,

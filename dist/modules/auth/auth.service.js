@@ -13,7 +13,7 @@ exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const jwt_1 = require("@nestjs/jwt");
-const bcrypt = require("bcryptjs");
+const bcryptjs_1 = require("bcryptjs");
 let AuthService = class AuthService {
     constructor(prisma, jwtService) {
         this.prisma = prisma;
@@ -26,7 +26,7 @@ let AuthService = class AuthService {
         if (!user) {
             throw new common_1.UnauthorizedException('Credenziali non valide');
         }
-        const passwordValid = await bcrypt.compare(dto.password, user.password);
+        const passwordValid = await bcryptjs_1.default.compare(dto.password, user.password);
         if (!passwordValid) {
             throw new common_1.UnauthorizedException('Credenziali non valide');
         }
