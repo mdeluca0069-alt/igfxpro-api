@@ -47,5 +47,5 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
-# Applica migrazioni e avvia server
-CMD sh -c "npx prisma migrate deploy && node dist/main.js"
+# Avvia solo il server (migrazioni vanno fatte manualmente)
+CMD ["node", "dist/main.js"]
