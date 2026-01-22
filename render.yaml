@@ -5,6 +5,12 @@ services:
     plan: free
     buildCommand: npm ci --legacy-peer-deps && npm run build && npm run prisma:generate
     startCommand: node dist/main.js
+    port: 3000
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
     envVars:
       - key: NODE_ENV
         value: production
