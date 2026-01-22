@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: igfxpro-api
+    runtime: node
+    plan: free
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: igfxpro-db
+          property: connectionString
+    healthCheckPath: /health
+    healthCheckInterval: 30
+    maxShutdownDelay: 30
+
+databases:
+  - name: igfxpro-db
+    plan: free
+    databaseName: igfxpro_db
+    user: igfxpro_user
+    region: ohio
