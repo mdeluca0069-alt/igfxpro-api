@@ -1,6 +1,6 @@
 import { PrismaClient, RoleName, AccountType, DepositStatus, TradeType, TradeStatus, RiskEventType, UserStatus } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import { Decimal } from '@prisma/client/runtime/library';
+const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
