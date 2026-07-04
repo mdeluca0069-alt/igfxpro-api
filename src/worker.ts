@@ -1,10 +1,14 @@
+/// <reference types="@cloudflare/workers-types" />
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import type { HonoEnv } from "./common/types";
+import type { Env } from "./prisma/prisma.edge";
 import { healthRoutes } from "./modules/health/health.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { configRoutes, tenantRoutes } from "./modules/config/config.routes";
+import { tradingDataRoutes, topLevelMarketRoutes, calendarRoutes } from "./modules/market-data/market-data.routes";
+import { refreshQuotes } from "./modules/market-data/quotes.cron";
 
 const app = new Hono<HonoEnv>();
 
@@ -46,4 +50,16 @@ app.route("/api/v1/auth", authRoutes);
 app.route("/config", configRoutes);
 app.route("/tenant", tenantRoutes);
 
-export default app;
+app.route("/trading", tradingDataRoutes);
+app.route("/api/v1/trading", tradingDataRoutes);
+app.route("/", topLevelMarketRoutes);
+app.route("/api/v1", topLevelMarketRoutes);
+app.route("/calendar", calendarRoutes);
+app.route("/api/v1/calendar", calendarRoutes);
+
+export default {
+  fetch: app.fetch,
+  scheduled: async (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(refreshQuotes(env));
+  },
+};

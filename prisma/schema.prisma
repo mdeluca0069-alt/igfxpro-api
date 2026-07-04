@@ -164,6 +164,20 @@ model Instrument {
   Position          Position[]
 }
 
+// Not part of apiv2's schema — apiv2 keeps quotes purely in-memory, fed by a
+// live WebSocket connection to TwelveData/Binance that a Cloudflare Worker
+// can't hold open between requests. This table is the REST-polling stopgap
+// (Cron Trigger writes here) until the Durable Object real-time feed lands.
+model Quote {
+  symbol     String   @id
+  bid        Decimal  @db.Decimal(18, 8)
+  ask        Decimal  @db.Decimal(18, 8)
+  mid        Decimal  @db.Decimal(18, 8)
+  spread     Decimal  @db.Decimal(18, 8)
+  changePct  Decimal  @db.Decimal(10, 4)
+  updatedAt  DateTime @updatedAt
+}
+
 model KycCase {
   id                 String    @id @default(uuid())
   userId             String    @unique

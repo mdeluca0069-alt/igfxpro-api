@@ -7,3 +7,6 @@ workers_dev = true
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "02626740873f4636afd2e060f799a3ce"
+
+[triggers]
+crons = ["*/1 * * * *"]
