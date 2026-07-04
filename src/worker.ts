@@ -17,7 +17,7 @@ const app = new Hono<HonoEnv>();
 app.use(
   "*",
   cors({
-    origin: ["https://igfxpro.com", "https://admin.igfxpro.com"],
+    origin: ["https://igfxpro.com", "https://www.igfxpro.com", "https://admin.igfxpro.com"],
     credentials: true,
   })
 );
