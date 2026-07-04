@@ -388,6 +388,50 @@ tradingRoutes.post("/position/:id/close", async (c) => {
       },
     });
 
+    // Ported from apiv2's settlement.engine.ts: mark the TradeAudit row CLOSED
+    // so tax reporting / trade history queries (which filter on
+    // tradeStatus: "CLOSED") see this trade. Only the fully-closed leg is
+    // marked; a partial close's new child Position keeps the original audit
+    // row open until it is itself closed.
+    if (!isPartial) {
+      const closedAt = new Date();
+      const duration = Math.floor((closedAt.getTime() - pos.openedAt.getTime()) / 60_000);
+      const auditUpdate = await tx.tradeAudit.updateMany({
+        where: { positionId },
+        data: {
+          exitPrice,
+          pnlRealized: cappedPnl,
+          pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
+          tradeStatus: "CLOSED",
+          closedAt,
+          duration,
+        },
+      });
+      if (auditUpdate.count === 0) {
+        await tx.tradeAudit.create({
+          data: {
+            userId: user.sub,
+            orderId: pos.orderId,
+            positionId,
+            symbol: pos.symbol,
+            side: pos.side,
+            quantity: closeQty,
+            entryPrice,
+            exitPrice,
+            pnlRealized: cappedPnl,
+            pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
+            marginUsed: pos.marginUsed,
+            leverage: pos.leverage,
+            tradeStatus: "CLOSED",
+            closedAt,
+            duration,
+            lifecycle: {},
+            riskMetrics: {},
+          },
+        });
+      }
+    }
+
     return { ok: true as const, pnl: cappedPnl, netCredit };
   });
 

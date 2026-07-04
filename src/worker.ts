@@ -15,6 +15,14 @@ import { riskRoutes } from "./modules/risk/risk.routes";
 import { aiRoutes, signalsRoutes } from "./modules/ai/ai.routes";
 import { autopilotRoutes } from "./modules/autopilot/autopilot.routes";
 import { adminRoutes } from "./modules/admin/admin.routes";
+import { watchlistRoutes } from "./modules/watchlist/watchlist.routes";
+import { complianceRoutes, onboardingRoutes } from "./modules/compliance/compliance.routes";
+import { reportsRoutes } from "./modules/reports/reports.routes";
+import { taxRoutes } from "./modules/reports/tax.routes";
+import { paperRoutes } from "./modules/paper/paper.routes";
+import { supportRoutes, supportAdminRoutes } from "./modules/support/support.routes";
+import { academyRoutes } from "./modules/academy/academy.routes";
+import { apiKeyRoutes } from "./modules/public-api/api-key.routes";
 
 const app = new Hono<HonoEnv>();
 
@@ -82,6 +90,32 @@ app.route("/api/v1/autopilot", autopilotRoutes);
 
 app.route("/admin", adminRoutes);
 app.route("/api/v1/admin", adminRoutes);
+
+app.route("/watchlist", watchlistRoutes);
+app.route("/api/v1/watchlist", watchlistRoutes);
+app.route("/compliance", complianceRoutes);
+app.route("/api/v1/compliance", complianceRoutes);
+app.route("/onboarding", onboardingRoutes);
+app.route("/api/v1/onboarding", onboardingRoutes);
+
+app.route("/reports", reportsRoutes);
+app.route("/api/v1/reports", reportsRoutes);
+app.route("/tax", taxRoutes);
+app.route("/api/v1/tax", taxRoutes);
+
+app.route("/paper", paperRoutes);
+app.route("/api/v1/paper", paperRoutes);
+
+app.route("/support", supportRoutes);
+app.route("/api/v1/support", supportRoutes);
+app.route("/admin/support", supportAdminRoutes);
+app.route("/api/v1/admin/support", supportAdminRoutes);
+
+app.route("/academy", academyRoutes);
+app.route("/api/v1/academy", academyRoutes);
+
+app.route("/api-keys", apiKeyRoutes);
+app.route("/api/v1/api-keys", apiKeyRoutes);
 
 export default {
   fetch: app.fetch,
