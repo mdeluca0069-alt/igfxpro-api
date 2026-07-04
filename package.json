@@ -4,6 +4,7 @@
   "description": "",
   "main": "dist/main.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "node ./node_modules/typescript/bin/tsc",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
