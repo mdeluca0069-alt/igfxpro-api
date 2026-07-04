@@ -22,15 +22,21 @@ tradingRoutes.use("*", jwtAuthMiddleware);
 // LIMIT/STOP/STOP_LIMIT/TRAILING_STOP are accepted and stored as resting
 // orders but are NOT actively trigger-monitored yet — that needs the
 // continuous price-watching infra that's deferred to the real-time Durable
-// Object phase, same as SL/TP auto-triggering on open positions. Kill-switch,
-// per-instrument exposure limits, trading suspension, commission, and swap
-// are deferred to the risk/admin phases.
+// Object phase, same as SL/TP auto-triggering on open positions.
+// Per-instrument exposure limits, trading suspension, commission, and swap
+// are deferred further (kill-switch is wired below, Phase 7).
 tradingRoutes.post("/order", async (c) => {
   const dto = await validateBody(NewOrderDto, await c.req.json());
   const user = c.get("user")!;
   const symbol = dto.symbol.toUpperCase();
   const type = dto.type ?? "MARKET";
   const prisma = getPrisma(c.env);
+
+  const killSwitch = await prisma.brokerSetting.findUnique({ where: { key: "kill_switch" } });
+  if ((killSwitch?.value as { enabled?: boolean } | undefined)?.enabled) {
+    const reason = (killSwitch!.value as { reason?: string }).reason ?? "Admin kill switch active";
+    throw new BadRequestException(`KILL_SWITCH_ACTIVE: ${reason}`);
+  }
 
   const meta = INSTRUMENT_META[symbol];
   if (!meta) throw new BadRequestException("INSTRUMENT_NOT_FOUND");
