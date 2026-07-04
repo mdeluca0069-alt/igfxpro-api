@@ -1,0 +1,9 @@
+name = "igfxpro-api"
+main = "src/worker.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "02626740873f4636afd2e060f799a3ce"
