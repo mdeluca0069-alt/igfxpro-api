@@ -9,6 +9,7 @@ import { authRoutes } from "./modules/auth/auth.routes";
 import { configRoutes, tenantRoutes } from "./modules/config/config.routes";
 import { tradingDataRoutes, topLevelMarketRoutes, calendarRoutes } from "./modules/market-data/market-data.routes";
 import { refreshQuotes } from "./modules/market-data/quotes.cron";
+import { tradingRoutes } from "./modules/trading/trading.routes";
 
 const app = new Hono<HonoEnv>();
 
@@ -52,6 +53,8 @@ app.route("/tenant", tenantRoutes);
 
 app.route("/trading", tradingDataRoutes);
 app.route("/api/v1/trading", tradingDataRoutes);
+app.route("/trading", tradingRoutes);
+app.route("/api/v1/trading", tradingRoutes);
 app.route("/", topLevelMarketRoutes);
 app.route("/api/v1", topLevelMarketRoutes);
 app.route("/calendar", calendarRoutes);
