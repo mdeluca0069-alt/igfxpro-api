@@ -3,7 +3,9 @@ import { SignJWT, jwtVerify } from "jose";
 export type JwtPayload = {
   sub: string;
   email: string;
-  role: string;
+  tenantId: string;
+  roles: string[];
+  permissions: string[];
 };
 
 function getSecretKey(jwtSecret: string) {
@@ -13,11 +15,11 @@ function getSecretKey(jwtSecret: string) {
   return new TextEncoder().encode(jwtSecret);
 }
 
-export async function signJwt(payload: JwtPayload, jwtSecret: string): Promise<string> {
-  return new SignJWT(payload)
+export async function signJwt(payload: JwtPayload, jwtSecret: string, expiresIn = "1h"): Promise<string> {
+  return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("1h")
+    .setExpirationTime(expiresIn)
     .sign(getSecretKey(jwtSecret));
 }
 
