@@ -6,6 +6,7 @@ export type Env = {
   HYPERDRIVE: { connectionString: string };
   JWT_SECRET: string;
   TWELVEDATA_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
 };
 
 // Workers tears down a request's I/O objects (sockets, etc.) once that

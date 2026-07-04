@@ -12,6 +12,8 @@ import { refreshQuotes } from "./modules/market-data/quotes.cron";
 import { tradingRoutes } from "./modules/trading/trading.routes";
 import { walletRoutes, clientRoutes } from "./modules/wallet/wallet.routes";
 import { riskRoutes } from "./modules/risk/risk.routes";
+import { aiRoutes, signalsRoutes } from "./modules/ai/ai.routes";
+import { autopilotRoutes } from "./modules/autopilot/autopilot.routes";
 
 const app = new Hono<HonoEnv>();
 
@@ -69,6 +71,13 @@ app.route("/api/v1/client", clientRoutes);
 
 app.route("/risk", riskRoutes);
 app.route("/api/v1/risk", riskRoutes);
+
+app.route("/ai", aiRoutes);
+app.route("/api/v1/ai", aiRoutes);
+app.route("/signals", signalsRoutes);
+app.route("/api/v1/signals", signalsRoutes);
+app.route("/autopilot", autopilotRoutes);
+app.route("/api/v1/autopilot", autopilotRoutes);
 
 export default {
   fetch: app.fetch,
