@@ -17,4 +17,17 @@ tag = "v1"
 new_sqlite_classes = ["RealtimeHub"]
 
 [triggers]
-crons = ["*/1 * * * *"]
+# Two providers, two cadences (src/modules/market-data/quotes.cron.ts):
+#   "* * * * *"   — fast tick: Binance (crypto, free/unlimited) + Finnhub
+#                   (US equities, 60 calls/min free tier, ~35 symbols/tick)
+#                   — both cheap enough to run every minute.
+#   "0 */3 * * *" — slow tick: TwelveData for the ~80 remaining instruments
+#                   (FOREX/METAL/COMMODITY/INDEX/EQUITY_EU). TwelveData's
+#                   free tier is 800 credits/day, 1 credit/symbol/call — at
+#                   80 symbols that's 8 refreshes/day (640 credits), leaving
+#                   headroom for on-demand candle requests on the same key.
+#                   (The old single-provider */1 * * * * cadence across all
+#                   130 symbols exhausted 162,986/800 daily credits.)
+# The scheduled handler in worker.ts checks event.cron to run the matching
+# refresh function; position-monitor runs on every tick regardless.
+crons = ["* * * * *", "0 */3 * * *"]

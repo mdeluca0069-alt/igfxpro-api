@@ -8,7 +8,7 @@ import { healthRoutes } from "./modules/health/health.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { configRoutes, tenantRoutes } from "./modules/config/config.routes";
 import { tradingDataRoutes, topLevelMarketRoutes, calendarRoutes } from "./modules/market-data/market-data.routes";
-import { refreshQuotes } from "./modules/market-data/quotes.cron";
+import { refreshFastQuotes, refreshSlowQuotes } from "./modules/market-data/quotes.cron";
 import { monitorPositions } from "./modules/trading/position-monitor";
 import { tradingRoutes } from "./modules/trading/trading.routes";
 import { walletRoutes, clientRoutes } from "./modules/wallet/wallet.routes";
@@ -139,9 +139,10 @@ export default {
     }
     return app.fetch(request, env, ctx);
   },
-  scheduled: async (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(
-      refreshQuotes(env).then(() => monitorPositions(env))
-    );
+  scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    // Two cron patterns share this handler (see wrangler.toml) — event.cron
+    // tells us which one fired so each runs its own provider(s).
+    const refresh = event.cron === "* * * * *" ? refreshFastQuotes(env) : refreshSlowQuotes(env);
+    ctx.waitUntil(refresh.then(() => monitorPositions(env)));
   },
 };

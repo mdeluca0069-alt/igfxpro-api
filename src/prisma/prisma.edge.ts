@@ -6,6 +6,7 @@ export type Env = {
   HYPERDRIVE: { connectionString: string };
   JWT_SECRET: string;
   TWELVEDATA_API_KEY: string;
+  FINNHUB_API_KEY: string;
   ANTHROPIC_API_KEY: string;
   REALTIME_HUB: DurableObjectNamespace;
 };
