@@ -35,9 +35,24 @@ function parseDatetime(dt: string): number {
   return isNaN(ms) ? 0 : Math.floor(ms / 1000);
 }
 
-export async function fetchLiveQuotes(apiKey: string, symbols: string[]): Promise<Map<string, LiveQuote>> {
+export type LiveQuotesResult = { quotes: Map<string, LiveQuote>; quotaExceeded: boolean };
+
+// A TwelveData "quota exceeded" reply is {code:429,...} — either at the top
+// level (checked before the batch is processed at all) or, if the quota runs
+// out mid-batch, embedded per-symbol inside an otherwise-normal-looking
+// object. Both shapes are checked so key rotation (twelvedata-rotation.ts)
+// can tell "this key is done for the day" apart from "network/parse error".
+function isQuotaExceeded(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object") return false;
+  if ((parsed as { code?: number }).code === 429) return true;
+  return Object.values(parsed as Record<string, unknown>).some(
+    (entry) => entry && typeof entry === "object" && (entry as { code?: number }).code === 429
+  );
+}
+
+export async function fetchLiveQuotesRaw(apiKey: string, symbols: string[]): Promise<LiveQuotesResult> {
   const result = new Map<string, LiveQuote>();
-  if (!symbols.length) return result;
+  if (!symbols.length) return { quotes: result, quotaExceeded: false };
 
   const tdSymbols = symbols.map(toTwelveDataSymbol);
   const params = new URLSearchParams({ apikey: apiKey, symbol: tdSymbols.join(","), format: "JSON" });
@@ -48,7 +63,11 @@ export async function fetchLiveQuotes(apiKey: string, symbols: string[]): Promis
     parsed = await res.json();
   } catch (err) {
     console.error("[twelvedata] fetchLiveQuotes network error:", (err as Error).message);
-    return result;
+    return { quotes: result, quotaExceeded: false };
+  }
+
+  if (isQuotaExceeded(parsed)) {
+    return { quotes: result, quotaExceeded: true };
   }
 
   const entries =
@@ -82,7 +101,11 @@ export async function fetchLiveQuotes(apiKey: string, symbols: string[]): Promis
     });
   }
 
-  return result;
+  return { quotes: result, quotaExceeded: false };
+}
+
+export async function fetchLiveQuotes(apiKey: string, symbols: string[]): Promise<Map<string, LiveQuote>> {
+  return (await fetchLiveQuotesRaw(apiKey, symbols)).quotes;
 }
 
 export async function fetchHistoricalCandles(

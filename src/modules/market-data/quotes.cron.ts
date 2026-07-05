@@ -1,7 +1,7 @@
 import { getPrisma } from "../../prisma/prisma.edge";
 import type { Env } from "../../prisma/prisma.edge";
 import { ALL_SYMBOLS, SYMBOLS_BY_CLASS, BROKER_SPREAD_DEFAULTS } from "../../common/instruments";
-import { fetchLiveQuotes } from "../../common/twelvedata";
+import { fetchLiveQuotesRotating } from "../../common/twelvedata-rotation";
 import { fetchBinanceQuotes } from "../../common/binance";
 import { fetchFinnhubQuotes } from "../../common/finnhub";
 import { broadcastAll } from "../../common/realtime";
@@ -67,10 +67,15 @@ export async function refreshFastQuotes(env: Env): Promise<void> {
 }
 
 // Slow tick (every few hours, see wrangler.toml): TwelveData for every
-// instrument not covered by the fast tick's providers.
+// instrument not covered by the fast tick's providers. Rotates across up to
+// 5 TwelveData API keys (twelvedata-rotation.ts) — when the active one hits
+// its daily quota, the next key takes over automatically instead of leaving
+// these symbols stale until midnight.
 export async function refreshSlowQuotes(env: Env): Promise<void> {
   const slowSymbols = ALL_SYMBOLS.filter((s) => !SYMBOLS_BY_CLASS.CRYPTO.includes(s) && !SYMBOLS_BY_CLASS.EQUITY_US.includes(s));
-  const quotes = await fetchLiveQuotes(env.TWELVEDATA_API_KEY, slowSymbols);
+  const prisma = getPrisma(env);
+  const apiKeys = [env.TWELVEDATA_API_KEY, env.TWELVEDATA_API_KEY_2, env.TWELVEDATA_API_KEY_3, env.TWELVEDATA_API_KEY_4, env.TWELVEDATA_API_KEY_5];
+  const quotes = await fetchLiveQuotesRotating(prisma, apiKeys, slowSymbols);
 
   const rows: QuoteRow[] = [...quotes.values()].map((q) => {
     const spread = BROKER_SPREAD_DEFAULTS[q.symbol] ?? q.close * 0.0002;
