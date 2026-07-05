@@ -5,6 +5,7 @@ import { jwtAuthMiddleware } from "../../common/middleware/jwt-auth.middleware";
 import { rolesMiddleware } from "../../common/middleware/roles.middleware";
 import { validateBody } from "../../common/validate";
 import { BadRequestException, NotFoundException } from "../../common/http-exceptions";
+import { pushToUser } from "../../common/realtime";
 import type { HonoEnv } from "../../common/types";
 import {
   CapitalOpDto,
@@ -221,6 +222,8 @@ adminRoutes.post("/ledger/review", async (c) => {
     await tx.ledgerEntry.update({ where: { id: entry.id }, data: { status: "APPROVED" } });
   });
 
+  await pushToUser(c.env, dto.userId, "wallet.updated", {});
+
   return c.json({ ok: true });
 });
 
@@ -252,6 +255,7 @@ adminRoutes.post("/client/kyc", async (c) => {
   const dto = await validateBody(KycUpdateDto, await c.req.json());
   const prisma = getPrisma(c.env);
   const user = await prisma.user.update({ where: { id: dto.userId }, data: { kycStatus: dto.kycStatus } });
+  await pushToUser(c.env, dto.userId, "kyc.updated", { kycStatus: user.kycStatus });
   return c.json({ ok: true, user: { id: user.id, kycStatus: user.kycStatus } });
 });
 
@@ -272,6 +276,7 @@ adminRoutes.post("/kyc/cases/:id/approve", async (c) => {
     prisma.kycCase.update({ where: { id: kycCase.id }, data: { status: "APPROVED", reviewedBy: c.get("user")!.sub, reviewedAt: new Date(), completedAt: new Date() } }),
     prisma.user.update({ where: { id: kycCase.userId }, data: { kycStatus: "approved" } }),
   ]);
+  await pushToUser(c.env, kycCase.userId, "kyc.updated", { kycStatus: "approved" });
   return c.json({ ok: true });
 });
 
@@ -285,6 +290,7 @@ adminRoutes.post("/kyc/cases/:id/reject", async (c) => {
     prisma.kycCase.update({ where: { id: kycCase.id }, data: { status: "REJECTED", reviewNotes: body.reason, reviewedBy: c.get("user")!.sub, reviewedAt: new Date() } }),
     prisma.user.update({ where: { id: kycCase.userId }, data: { kycStatus: "rejected" } }),
   ]);
+  await pushToUser(c.env, kycCase.userId, "kyc.updated", { kycStatus: "rejected" });
   return c.json({ ok: true });
 });
 

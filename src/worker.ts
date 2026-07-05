@@ -9,6 +9,7 @@ import { authRoutes } from "./modules/auth/auth.routes";
 import { configRoutes, tenantRoutes } from "./modules/config/config.routes";
 import { tradingDataRoutes, topLevelMarketRoutes, calendarRoutes } from "./modules/market-data/market-data.routes";
 import { refreshQuotes } from "./modules/market-data/quotes.cron";
+import { monitorPositions } from "./modules/trading/position-monitor";
 import { tradingRoutes } from "./modules/trading/trading.routes";
 import { walletRoutes, clientRoutes } from "./modules/wallet/wallet.routes";
 import { riskRoutes } from "./modules/risk/risk.routes";
@@ -23,6 +24,9 @@ import { paperRoutes } from "./modules/paper/paper.routes";
 import { supportRoutes, supportAdminRoutes } from "./modules/support/support.routes";
 import { academyRoutes } from "./modules/academy/academy.routes";
 import { apiKeyRoutes } from "./modules/public-api/api-key.routes";
+import { RealtimeHub } from "./durable-objects/realtime-hub";
+
+export { RealtimeHub };
 
 const app = new Hono<HonoEnv>();
 
@@ -118,8 +122,26 @@ app.route("/api-keys", apiKeyRoutes);
 app.route("/api/v1/api-keys", apiKeyRoutes);
 
 export default {
-  fetch: app.fetch,
+  // Fase 9 — real-time WebSocket gateway. This bypasses Hono entirely: Hono's
+  // Context wraps handler return values in a way that rejects status-101
+  // (Switching Protocols) Responses ("Responses may only be constructed with
+  // status codes in the range 200 to 599" — 101 is outside that range as far
+  // as the *reconstructed* Response goes), so the DO's upgrade Response has
+  // to be returned directly from the raw fetch handler, before app.fetch
+  // ever sees the request. The JWT itself is verified inside the Durable
+  // Object; auth failure there closes the socket with code 4001, which
+  // igfxpro-frontend/api/websocket.ts already knows how to react to.
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+    const url = new URL(request.url);
+    if (url.pathname === "/ws") {
+      const id = env.REALTIME_HUB.idFromName("global");
+      return env.REALTIME_HUB.get(id).fetch(request);
+    }
+    return app.fetch(request, env, ctx);
+  },
   scheduled: async (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(refreshQuotes(env));
+    ctx.waitUntil(
+      refreshQuotes(env).then(() => monitorPositions(env))
+    );
   },
 };

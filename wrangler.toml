@@ -8,5 +8,13 @@ workers_dev = true
 binding = "HYPERDRIVE"
 id = "02626740873f4636afd2e060f799a3ce"
 
+[[durable_objects.bindings]]
+name = "REALTIME_HUB"
+class_name = "RealtimeHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeHub"]
+
 [triggers]
 crons = ["*/1 * * * *"]

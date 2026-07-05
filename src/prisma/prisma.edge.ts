@@ -7,6 +7,7 @@ export type Env = {
   JWT_SECRET: string;
   TWELVEDATA_API_KEY: string;
   ANTHROPIC_API_KEY: string;
+  REALTIME_HUB: DurableObjectNamespace;
 };
 
 // Workers tears down a request's I/O objects (sockets, etc.) once that

@@ -8,7 +8,8 @@ import type { HonoEnv } from "../../common/types";
 import { INSTRUMENT_META } from "../../common/instruments";
 import { effectiveLeverage } from "../../common/leverage-guard";
 import { getMarginState, canAcceptOrder } from "../../common/margin-controller";
-import { realizedPnl, pnlPercent, unrealizedPnl, applyNBP } from "../../common/pnl-calculator";
+import { closePosition } from "../../common/position-closer";
+import { pushToUser } from "../../common/realtime";
 import { NewOrderDto, ModifyOrderDto, ClosePositionDto } from "./order.dto";
 
 export const tradingRoutes = new Hono<HonoEnv>();
@@ -213,6 +214,35 @@ tradingRoutes.post("/order", async (c) => {
 
   if (!result.ok) throw new BadRequestException(result.reason);
 
+  await Promise.all([
+    pushToUser(c.env, user.sub, "order.filled", {
+      orderId: result.order.id,
+      symbol,
+      side: dto.side,
+      quantity: dto.quantity,
+      fillPrice: execPrice,
+    }),
+    pushToUser(c.env, user.sub, "position.opened", {
+      id: result.position.id,
+      symbol,
+      side: dto.side,
+      status: "OPEN",
+      quantity: dto.quantity,
+      entryPrice: execPrice,
+      markPrice: execPrice,
+      pnl: 0,
+      pnlPercent: 0,
+      marginUsed: marginRequired,
+      stopLoss: dto.stopLoss ?? null,
+      takeProfit: dto.takeProfit ?? null,
+      exitPrice: null,
+      openedAt: result.position.openedAt.toISOString(),
+      closedAt: null,
+      leverage: lev,
+      openedByAutopilot: false,
+    }),
+  ]);
+
   return c.json({
     id: result.order.id,
     clientOrderId: result.order.clientOrderId ?? undefined,
@@ -274,170 +304,24 @@ tradingRoutes.get("/position/:id", async (c) => {
 });
 
 // ── Position close (full or partial) ────────────────────────────────────────
-// Ported from apiv2's position.close.ts + settlement.engine.ts, simplified:
-// no commission/swap charge (deferred), no exposure registry, no outbox
-// event (deferred to real-time phase). Core financial correctness (PnL
-// formula, negative balance protection, atomic wallet/position update) is
-// faithful to the original.
+// The financial logic (PnL formula, negative balance protection, atomic
+// wallet/position update, TradeAudit close) lives in position-closer.ts,
+// shared with the Fase 9 position-monitor cron's SL/TP and stop-out closes.
 tradingRoutes.post("/position/:id/close", async (c) => {
   const user = c.get("user")!;
   const positionId = c.req.param("id");
   const dto = await validateBody(ClosePositionDto, await c.req.json().catch(() => ({})));
   const prisma = getPrisma(c.env);
 
-  const pos = await prisma.position.findUnique({ where: { id: positionId } });
-  if (!pos) return c.json({ ok: false, reason: "POSITION_NOT_FOUND" });
-  if (pos.userId !== user.sub) return c.json({ ok: false, reason: "UNAUTHORIZED" });
-  if (pos.status !== "OPEN") return c.json({ ok: false, reason: `POSITION_ALREADY_${pos.status}` });
+  const result = await closePosition(prisma, positionId, { expectedUserId: user.sub, quantity: dto.quantity });
+  if (result.ok === false) return c.json({ ok: false, reason: result.reason });
 
-  const quote = await prisma.quote.findUnique({ where: { symbol: pos.symbol } });
-  if (!quote) return c.json({ ok: false, reason: "NO_PRICE_AVAILABLE" });
+  await Promise.all([
+    pushToUser(c.env, user.sub, "position.closed", { positionId, id: positionId, symbol: result.symbol, pnl: result.pnl, closeReason: "manual" }),
+    pushToUser(c.env, user.sub, "wallet.updated", {}),
+  ]);
 
-  const closeQty = dto.quantity && dto.quantity < pos.quantity.toNumber() ? dto.quantity : pos.quantity.toNumber();
-  const isPartial = closeQty < pos.quantity.toNumber();
-  const exitPrice = pos.side === "BUY" ? quote.bid.toNumber() : quote.ask.toNumber();
-
-  const entryPrice = pos.entryPrice.toNumber();
-  const rawPnl = realizedPnl(pos.side as "BUY" | "SELL", closeQty, entryPrice, exitPrice);
-  const marginPortion = (closeQty / pos.quantity.toNumber()) * pos.marginUsed.toNumber();
-  const cappedPnl = applyNBP(rawPnl, marginPortion);
-  const netCredit = cappedPnl;
-
-  const result = await prisma.$transaction(async (tx) => {
-    const posRows = await tx.$queryRaw<Array<{ status: string }>>`
-      SELECT status FROM "Position" WHERE id = ${positionId} FOR UPDATE
-    `;
-    if (posRows.length === 0 || posRows[0].status !== "OPEN") {
-      return { ok: false as const, reason: "POSITION_ALREADY_CLOSED" };
-    }
-
-    const walletRows = await tx.$queryRaw<Array<{ locked: string }>>`
-      SELECT locked FROM "WalletAccount" WHERE "userId" = ${user.sub} FOR UPDATE
-    `;
-    const currentLocked = walletRows[0] ? parseFloat(walletRows[0].locked) : 0;
-    const safeRelease = Math.max(0, Math.min(currentLocked, marginPortion));
-
-    if (isPartial) {
-      await tx.position.update({
-        where: { id: positionId },
-        data: { quantity: { decrement: closeQty }, marginUsed: { decrement: marginPortion } },
-      });
-      await tx.position.create({
-        data: {
-          userId: user.sub,
-          orderId: pos.orderId,
-          symbol: pos.symbol,
-          side: pos.side,
-          quantity: closeQty,
-          entryPrice,
-          markPrice: exitPrice,
-          exitPrice,
-          marginUsed: marginPortion,
-          leverage: pos.leverage,
-          status: "CLOSED",
-          closedAt: new Date(),
-          pnl: cappedPnl,
-          pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
-        },
-      });
-    } else {
-      await tx.position.update({
-        where: { id: positionId },
-        data: {
-          status: "CLOSED",
-          closedAt: new Date(),
-          exitPrice,
-          markPrice: exitPrice,
-          pnl: cappedPnl,
-          pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
-        },
-      });
-    }
-
-    const updatedWallet = await tx.walletAccount.update({
-      where: { userId: user.sub },
-      data: { balance: { increment: netCredit }, locked: { decrement: safeRelease } },
-      select: { balance: true },
-    });
-
-    await tx.ledgerEntry.create({
-      data: {
-        id: randomUUID(),
-        userId: user.sub,
-        currency: "USD",
-        amount: netCredit,
-        type: "TRADE_PNL",
-        reference: positionId,
-        status: "COMPLETED",
-        note: `P&L settlement for position ${positionId}`,
-        runningBalance: updatedWallet.balance,
-      },
-    });
-    await tx.ledgerEntry.create({
-      data: {
-        id: randomUUID(),
-        userId: user.sub,
-        currency: "USD",
-        amount: safeRelease,
-        type: "MARGIN_RELEASE",
-        reference: positionId,
-        status: "COMPLETED",
-        note: `Margin released for closed position ${positionId}`,
-        debitAccount: `CLIENT_MARGIN:${user.sub}`,
-        creditAccount: `CLIENT_FREE:${user.sub}`,
-      },
-    });
-
-    // Ported from apiv2's settlement.engine.ts: mark the TradeAudit row CLOSED
-    // so tax reporting / trade history queries (which filter on
-    // tradeStatus: "CLOSED") see this trade. Only the fully-closed leg is
-    // marked; a partial close's new child Position keeps the original audit
-    // row open until it is itself closed.
-    if (!isPartial) {
-      const closedAt = new Date();
-      const duration = Math.floor((closedAt.getTime() - pos.openedAt.getTime()) / 60_000);
-      const auditUpdate = await tx.tradeAudit.updateMany({
-        where: { positionId },
-        data: {
-          exitPrice,
-          pnlRealized: cappedPnl,
-          pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
-          tradeStatus: "CLOSED",
-          closedAt,
-          duration,
-        },
-      });
-      if (auditUpdate.count === 0) {
-        await tx.tradeAudit.create({
-          data: {
-            userId: user.sub,
-            orderId: pos.orderId,
-            positionId,
-            symbol: pos.symbol,
-            side: pos.side,
-            quantity: closeQty,
-            entryPrice,
-            exitPrice,
-            pnlRealized: cappedPnl,
-            pnlPercent: pnlPercent(pos.side as "BUY" | "SELL", entryPrice, exitPrice),
-            marginUsed: pos.marginUsed,
-            leverage: pos.leverage,
-            tradeStatus: "CLOSED",
-            closedAt,
-            duration,
-            lifecycle: {},
-            riskMetrics: {},
-          },
-        });
-      }
-    }
-
-    return { ok: true as const, pnl: cappedPnl, netCredit };
-  });
-
-  if (!result.ok) return c.json({ ok: false, reason: result.reason });
-
-  return c.json({ ok: true, positionId, symbol: pos.symbol, pnl: result.pnl, exitPrice, netCredit: result.netCredit });
+  return c.json({ ok: true, positionId, symbol: result.symbol, pnl: result.pnl, exitPrice: result.exitPrice, netCredit: result.netCredit });
 });
 
 tradingRoutes.put("/position/:id", async (c) => {
