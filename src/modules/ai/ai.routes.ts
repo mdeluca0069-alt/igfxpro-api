@@ -4,10 +4,30 @@ import { getPrisma } from "../../prisma/prisma.edge";
 import { jwtAuthMiddleware } from "../../common/middleware/jwt-auth.middleware";
 import type { HonoEnv } from "../../common/types";
 import { fetchHistoricalCandles } from "../../common/twelvedata";
+import { fetchBinanceCandles } from "../../common/binance";
+import { getActiveTwelveDataKey } from "../../common/twelvedata-rotation";
 import { calcEMA, calcRSI, calcMACD, calcATR, pearsonCorr } from "../../common/ta-indicators";
 import { runBacktest, type StrategyId } from "./backtest";
 
 export const aiRoutes = new Hono<HonoEnv>();
+
+// These endpoints used to call fetchHistoricalCandles with a single
+// hardcoded env.TWELVEDATA_API_KEY (the original key, daily-exhausted since
+// before the 5-key rotation system existed) — every call silently returned
+// [] (fetchHistoricalCandles swallows quota-exceeded responses), which for
+// /ai/strategy surfaced as "Insufficient data" and for backtest/hedge as
+// silently-empty results. Route through the same rotating key pool the
+// quote/signal crons use instead of a permanently-dead key.
+async function activeTwelveDataKey(c: { env: HonoEnv["Bindings"] }): Promise<string | null> {
+  const prisma = getPrisma(c.env);
+  return getActiveTwelveDataKey(prisma, [
+    c.env.TWELVEDATA_API_KEY,
+    c.env.TWELVEDATA_API_KEY_2,
+    c.env.TWELVEDATA_API_KEY_3,
+    c.env.TWELVEDATA_API_KEY_4,
+    c.env.TWELVEDATA_API_KEY_5,
+  ]);
+}
 
 // ── Signals/confidence/decision-log — public, platform-wide, unauthenticated
 // (registered before the "*" auth middleware below, since Hono's middleware
@@ -223,7 +243,8 @@ aiRoutes.post("/backtest", async (c) => {
   const capital = b?.initialCapital ?? 10000;
   const tdInterval: Record<string, string> = { "1M": "1min", "5M": "5min", "15M": "15min", "30M": "30min", "1H": "1h", "4H": "4h", "1D": "1day" };
 
-  let candles = await fetchHistoricalCandles(c.env.TWELVEDATA_API_KEY, symbol, tdInterval[timeframe] ?? "1h", 500);
+  const tdKey = await activeTwelveDataKey(c);
+  let candles = tdKey ? await fetchHistoricalCandles(tdKey, symbol, tdInterval[timeframe] ?? "1h", 500) : [];
 
   if (b?.dateFrom) {
     const from = new Date(b.dateFrom).getTime() / 1000;
@@ -251,7 +272,8 @@ aiRoutes.post("/strategy", async (c) => {
   const riskLevel = (b?.riskLevel ?? "MEDIUM") as "LOW" | "MEDIUM" | "HIGH";
   const tdInterval: Record<string, string> = { "1M": "1min", "5M": "5min", "15M": "15min", "1H": "1h", "4H": "4h", "1D": "1day" };
 
-  const candles = await fetchHistoricalCandles(c.env.TWELVEDATA_API_KEY, symbol, tdInterval[timeframe] ?? "1h", 200);
+  const tdKey = await activeTwelveDataKey(c);
+  const candles = tdKey ? await fetchHistoricalCandles(tdKey, symbol, tdInterval[timeframe] ?? "1h", 200) : [];
   const closes = candles.map((cd) => cd.close);
 
   if (closes.length < 30) {
@@ -346,19 +368,30 @@ aiRoutes.post("/strategy", async (c) => {
 });
 
 // ── Hedge Manager — ported from apiv2's handleHedge.
+// US500/US100 dropped (no free-tier TwelveData index data, same finding as
+// the homepage fix); BTCUSD/ETHUSD moved to Binance (free, matches the
+// rest of the architecture) instead of TwelveData.
 aiRoutes.post("/hedge", async (c) => {
   const b = await c.req.json<{ positions?: Array<{ id: string; symbol: string; side: "BUY" | "SELL"; quantity: number; pnl?: number }> }>();
   const positions = b?.positions ?? [];
-  const ALL_SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "US500", "US100", "BTCUSD", "ETHUSD", "XAGUSD", "WTI", "GBPJPY", "EURGBP", "AUDUSD", "USDCHF"];
+  const TD_SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "XAGUSD", "WTI", "GBPJPY", "EURGBP", "AUDUSD", "USDCHF"];
+  const BINANCE_SYMBOLS = ["BTCUSD", "ETHUSD"];
+  const ALL_SYMBOLS = [...TD_SYMBOLS, ...BINANCE_SYMBOLS];
   const N_CORR = 60;
 
+  const tdKey = await activeTwelveDataKey(c);
   const closesCache: Record<string, number[]> = {};
-  await Promise.all(
-    ALL_SYMBOLS.map(async (sym) => {
-      const candles = await fetchHistoricalCandles(c.env.TWELVEDATA_API_KEY, sym, "1h", N_CORR);
+  await Promise.all([
+    ...TD_SYMBOLS.map(async (sym) => {
+      if (!tdKey) return;
+      const candles = await fetchHistoricalCandles(tdKey, sym, "1h", N_CORR);
       if (candles.length >= 10) closesCache[sym] = candles.map((x) => x.close);
-    })
-  );
+    }),
+    ...BINANCE_SYMBOLS.map(async (sym) => {
+      const candles = await fetchBinanceCandles(sym, "1h", N_CORR);
+      if (candles.length >= 10) closesCache[sym] = candles.map((x) => x.close);
+    }),
+  ]);
 
   const suggestions = positions.map((pos) => {
     const posCloses = closesCache[pos.symbol];

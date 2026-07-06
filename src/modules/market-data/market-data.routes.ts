@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import { getPrisma } from "../../prisma/prisma.edge";
 import { jwtAuthMiddleware } from "../../common/middleware/jwt-auth.middleware";
 import type { HonoEnv } from "../../common/types";
-import { ALL_SYMBOLS, INSTRUMENT_META, toInstrumentRow } from "../../common/instruments";
+import { ALL_SYMBOLS, INSTRUMENT_META, SYMBOLS_BY_CLASS, toInstrumentRow } from "../../common/instruments";
 import { fetchHistoricalCandles } from "../../common/twelvedata";
+import { fetchBinanceCandles } from "../../common/binance";
+import { getActiveTwelveDataKey } from "../../common/twelvedata-rotation";
 import { buildOrderBook, bookClassFor } from "../../common/virtual-orderbook";
 
 // Mounted at /trading (and /api/v1/trading) in worker.ts
@@ -48,18 +50,53 @@ const TIMEFRAME_TO_TD_INTERVAL: Record<string, string> = {
   "1W": "1week",
 };
 
+const TIMEFRAME_TO_BINANCE_INTERVAL: Record<string, string> = {
+  "1M": "1m",
+  "5M": "5m",
+  "15M": "15m",
+  "30M": "30m",
+  "1H": "1h",
+  "4H": "4h",
+  "1D": "1d",
+  "1W": "1w",
+};
+
 // Mounted at "/" (root) in worker.ts — each of these already has its own
 // distinct first path segment (candles / liquidity / dom / indicators), so
 // there's no prefix collision with tradingDataRoutes above.
 export const topLevelMarketRoutes = new Hono<HonoEnv>();
 
+// Was hardcoded to a single TWELVEDATA_API_KEY (the original key, daily-
+// exhausted since before the 5-key rotation system existed) — every chart
+// request silently returned an empty candle array (fetchHistoricalCandles
+// swallows quota-exceeded/network errors into []), which the frontend
+// renders as "Generazione candele in corso…" forever since an empty array
+// isn't treated as an error. Now routes CRYPTO through Binance (free,
+// unlimited, matches quotes.cron.ts's own routing) and everything else
+// through the same rotating TwelveData key pool the quote/signal crons use.
 topLevelMarketRoutes.get("/candles/:symbol/:timeframe", jwtAuthMiddleware, async (c) => {
   const symbol = c.req.param("symbol").replace("-", "").toUpperCase();
   const timeframe = c.req.param("timeframe").toUpperCase();
   const limit = Math.min(parseInt(c.req.query("limit") ?? "200"), 5000);
-  const interval = TIMEFRAME_TO_TD_INTERVAL[timeframe] ?? "15min";
 
-  const candles = await fetchHistoricalCandles(c.env.TWELVEDATA_API_KEY, symbol, interval, limit);
+  if (SYMBOLS_BY_CLASS.CRYPTO.includes(symbol)) {
+    const interval = TIMEFRAME_TO_BINANCE_INTERVAL[timeframe] ?? "15m";
+    const candles = await fetchBinanceCandles(symbol, interval, limit);
+    return c.json(candles);
+  }
+
+  const prisma = getPrisma(c.env);
+  const key = await getActiveTwelveDataKey(prisma, [
+    c.env.TWELVEDATA_API_KEY,
+    c.env.TWELVEDATA_API_KEY_2,
+    c.env.TWELVEDATA_API_KEY_3,
+    c.env.TWELVEDATA_API_KEY_4,
+    c.env.TWELVEDATA_API_KEY_5,
+  ]);
+  if (!key) return c.json([]);
+
+  const interval = TIMEFRAME_TO_TD_INTERVAL[timeframe] ?? "15min";
+  const candles = await fetchHistoricalCandles(key, symbol, interval, limit);
   return c.json(candles);
 });
 
