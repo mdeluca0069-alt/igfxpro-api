@@ -28,3 +28,13 @@ export function pushToUser(env: Env, userId: string, type: string, payload: unkn
 export function broadcastAll(env: Env, type: string, payload: unknown): Promise<void> {
   return broadcast(env, { type, payload });
 }
+
+export async function getConnectionCount(env: Env): Promise<number> {
+  try {
+    const res = await hub(env).fetch("https://internal/stats");
+    const json = (await res.json()) as { connections?: number };
+    return json.connections ?? 0;
+  } catch {
+    return 0;
+  }
+}

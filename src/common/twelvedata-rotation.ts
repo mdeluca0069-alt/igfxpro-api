@@ -118,3 +118,21 @@ export async function fetchLiveQuotesRotating(prisma: PrismaClient, apiKeys: (st
 
   return results;
 }
+
+// Used by the signal generator, which needs single-symbol time_series
+// (candle) calls rather than a batch /quote call — reuses the same
+// daily-exhaustion state instead of a separate tracking mechanism, so a key
+// marked exhausted by the quote rotation is also skipped here.
+export async function getActiveTwelveDataKey(prisma: PrismaClient, apiKeys: (string | undefined)[]): Promise<string | null> {
+  const keys = apiKeys.filter((k): k is string => !!k);
+  if (keys.length === 0) return null;
+
+  const state = await loadState(prisma);
+  const now = Date.now();
+  const idx = keys.findIndex((_, i) => {
+    const until = state.dailyExhaustedUntil[i];
+    return !until || new Date(until).getTime() <= now;
+  });
+
+  return idx === -1 ? null : keys[idx];
+}

@@ -29,6 +29,38 @@ const TO_BINANCE: Record<string, string> = {
 
 const FROM_BINANCE: Record<string, string> = Object.fromEntries(Object.entries(TO_BINANCE).map(([ig, bn]) => [bn, ig]));
 
+export type BinanceCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
+
+// Used by the signal generator for real technical-analysis history —
+// Binance's public klines endpoint, no key, no meaningful rate limit.
+export async function fetchBinanceCandles(igSymbol: string, interval: string, limit: number): Promise<BinanceCandle[]> {
+  const bnSymbol = TO_BINANCE[igSymbol];
+  if (!bnSymbol) return [];
+
+  try {
+    const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${bnSymbol}&interval=${interval}&limit=${limit}`);
+    const raw = (await res.json()) as unknown;
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+      .map((k): BinanceCandle | null => {
+        const arr = k as unknown[];
+        const time = Number(arr[0]);
+        const open = parseFloat(String(arr[1]));
+        const high = parseFloat(String(arr[2]));
+        const low = parseFloat(String(arr[3]));
+        const close = parseFloat(String(arr[4]));
+        const volume = parseFloat(String(arr[5]));
+        if (!isFinite(open) || !isFinite(close)) return null;
+        return { time: Math.floor(time / 1000), open, high, low, close, volume: isFinite(volume) ? volume : 0 };
+      })
+      .filter((c): c is BinanceCandle => c !== null);
+  } catch (err) {
+    console.error(`[binance] fetchBinanceCandles ${igSymbol} failed:`, (err as Error).message);
+    return [];
+  }
+}
+
 export async function fetchBinanceQuotes(symbols: string[]): Promise<Map<string, BinanceQuote>> {
   const result = new Map<string, BinanceQuote>();
   const bnSymbols = symbols.map((s) => TO_BINANCE[s]).filter((s): s is string => !!s);

@@ -214,9 +214,29 @@ function precisionFromPipSize(pipSize: number): number {
 
 export const calendarRoutes = new Hono<HonoEnv>();
 
-// Real economic-calendar ingestion (ForexFactory/TradingEconomics/FRED) needs
-// separate API keys apiv2 has configured that aren't available yet — return
-// the correct empty shape rather than fabricate events.
+// Populated by calendar.cron.ts (hourly, alongside the TwelveData slow tick)
+// from real FRED release-date data + one computed forward date (next NFP).
+// ?hours=48 (as the homepage requests) means "48h back and 48h forward" —
+// recent-past events are still genuinely useful market context even though
+// most of this data isn't forward-looking (see fred.ts for why).
 calendarRoutes.get("/economic", async (c) => {
-  return c.json([]);
+  const prisma = getPrisma(c.env);
+  const hours = Math.min(parseInt(c.req.query("hours") ?? "48"), 24 * 30);
+  const now = Date.now();
+  const from = new Date(now - hours * 3_600_000);
+  const to = new Date(now + hours * 3_600_000);
+
+  const events = await prisma.economicEvent.findMany({
+    where: { eventTime: { gte: from, lte: to } },
+    orderBy: { eventTime: "asc" },
+  });
+
+  return c.json(
+    events.map((e) => ({
+      eventTime: e.eventTime.toISOString(),
+      currency: e.currency,
+      title: e.title,
+      impact: e.impact,
+    }))
+  );
 });

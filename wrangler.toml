@@ -17,19 +17,25 @@ tag = "v1"
 new_sqlite_classes = ["RealtimeHub"]
 
 [triggers]
-# Two providers, two cadences (src/modules/market-data/quotes.cron.ts):
-#   "* * * * *" — fast tick: Binance (crypto, free/unlimited) + Finnhub
-#                 (US equities, 60 calls/min free tier, ~35 symbols/tick) —
-#                 both cheap enough to run every minute.
-#   "0 * * * *" — slow tick: TwelveData for the ~80 remaining instruments
-#                 (FOREX/METAL/COMMODITY/INDEX/EQUITY_EU), rotating across 5
-#                 API keys (twelvedata-rotation.ts) — 5 × 800 = 4000
-#                 credits/day combined budget. Hourly = 24 refreshes/day ×
-#                 80 symbols = 1920 credits/day, using well under half the
-#                 combined budget so on-demand candle/chart requests (same
-#                 keys) and any future symbol growth have headroom.
-#                 (The original single-key */1 * * * * cadence across all
-#                 130 symbols exhausted 162,986/800 daily credits on key 1.)
-# The scheduled handler in worker.ts checks event.cron to run the matching
-# refresh function; position-monitor runs on every tick regardless.
-crons = ["* * * * *", "0 * * * *"]
+# Three cadences, dispatched in worker.ts's scheduled handler by event.cron:
+#   "* * * * *"    — fast tick: Binance (crypto, free/unlimited) + Finnhub
+#                    (US equities, 60 calls/min free tier, ~35 symbols/tick),
+#                    then position-monitor (SL/TP, pending orders, stop-out).
+#   "*/15 * * * *" — signal generator (5 candidate symbols, real RSI/MACD/
+#                    EMA200 TA) + autopilot execution engine. 3 of the 5
+#                    candidates use TwelveData candles (1 credit/call, same
+#                    as a quote call — confirmed via api_usage) = 3 credits
+#                    × 96 ticks/day = 288 credits/day, on the same rotating
+#                    5-key pool as the slow tick below.
+#   "0 * * * *"    — slow tick: TwelveData quotes for the ~80 remaining
+#                    instruments (FOREX/METAL/COMMODITY/INDEX/EQUITY_EU),
+#                    rotating across 5 API keys (twelvedata-rotation.ts) —
+#                    5 × 800 = 4000 credits/day combined. 24 refreshes/day ×
+#                    80 symbols = 1920 credits/day. Combined with the signal
+#                    generator's 288/day, total ~2208/day — comfortably
+#                    under the 4000 budget, leaving headroom for on-demand
+#                    candle/chart requests on the same keys. Also refreshes
+#                    the real economic calendar (FRED).
+#                    (The original single-key */1 * * * * cadence across all
+#                    130 symbols exhausted 162,986/800 daily credits on key 1.)
+crons = ["* * * * *", "*/15 * * * *", "0 * * * *"]

@@ -8,6 +8,74 @@ import { calcEMA, calcRSI, calcMACD, calcATR, pearsonCorr } from "../../common/t
 import { runBacktest, type StrategyId } from "./backtest";
 
 export const aiRoutes = new Hono<HonoEnv>();
+
+// ── Signals/confidence/decision-log — public, platform-wide, unauthenticated
+// (registered before the "*" auth middleware below, since Hono's middleware
+// chain only applies to routes matched after a .use() call's registration
+// point — same fix as autopilot.routes.ts's /stats/public). The public
+// marketing homepage calls these directly; they were 401-ing even after
+// fixing the frontend's relative-fetch bug because this whole router used
+// to require auth unconditionally. /api/v1/signals/active (a different,
+// separate router) remains the per-user authenticated feed.
+aiRoutes.get("/signals", async (c) => {
+  const prisma = getPrisma(c.env);
+  const symbol = c.req.query("symbol");
+  const signals = await prisma.olosSignal.findMany({
+    where: { status: "ACTIVE", ...(symbol ? { symbol } : {}) },
+    orderBy: { confidence: "desc" },
+  });
+  return c.json(signals);
+});
+
+aiRoutes.get("/confidence", async (c) => {
+  const prisma = getPrisma(c.env);
+  const signals = await prisma.olosSignal.findMany({ where: { status: "ACTIVE" } });
+
+  if (!signals.length) {
+    return c.json({ score: null, breakdown: null, status: "SCANNING", message: "Nessun segnale ad alta confidenza al momento.", nextScanInSec: 60, asOf: new Date().toISOString() });
+  }
+
+  const avg = signals.reduce((s, sig) => s + sig.confidence.toNumber(), 0) / signals.length / 100;
+
+  const breakdowns = signals.map((s) => s.confidenceBreakdown as { trend?: number; momentum?: number; volume?: number; macro?: number });
+  const avgFactor = (key: "trend" | "momentum" | "volume" | "macro") => {
+    const vals = breakdowns.map((b) => b[key]).filter((v): v is number => typeof v === "number");
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+  };
+
+  return c.json({
+    score: avg,
+    breakdown: { trend: avgFactor("trend"), momentum: avgFactor("momentum"), volume: avgFactor("volume"), macro: avgFactor("macro") },
+    status: "ACTIVE",
+    signalCount: signals.length,
+    asOf: signals[0]!.createdAt.toISOString(),
+  });
+});
+
+aiRoutes.get("/decision-log", async (c) => {
+  const prisma = getPrisma(c.env);
+  const signal = await prisma.olosSignal.findFirst({ orderBy: { createdAt: "desc" } });
+  if (!signal) return c.json({ status: "NO_DATA", trace: [] });
+
+  const breakdown = signal.confidenceBreakdown as { trend?: number; momentum?: number; volume?: number; macro?: number };
+  const trace = [
+    { stage: "01 / INGEST", text: `${signal.symbol} 1H candles ingested, live quote confirmed` },
+    { stage: "02 / CLASSIFY", text: `Regime: ${signal.marketRegime} · Volatility: ${signal.volatilityLevel}` },
+    { stage: "03 / SCORE", text: `Trend ${Math.round((breakdown.trend ?? 0) * 100)}% · Momentum ${Math.round((breakdown.momentum ?? 0) * 100)}% · Volume ${Math.round((breakdown.volume ?? 0) * 100)}% · Macro ${Math.round((breakdown.macro ?? 0) * 100)}%` },
+    { stage: "04 / VALIDATE", text: signal.entryRationale },
+    { stage: "05 / SIGNAL", text: `${signal.signalType} @ ${signal.entryPrice.toNumber()} · SL ${signal.stopLoss.toNumber()} · confidence ${signal.confidence.toNumber()}%` },
+  ];
+
+  return c.json({
+    status: "REAL",
+    symbol: signal.symbol,
+    signalType: signal.signalType,
+    confidence: signal.confidence.toNumber(),
+    createdAt: signal.createdAt.toISOString(),
+    trace,
+  });
+});
+
 aiRoutes.use("*", jwtAuthMiddleware);
 
 // ── Chat — ported from apiv2's ai-core/ai.router.ts handleAiChat. Uses raw
@@ -335,37 +403,6 @@ aiRoutes.post("/hedge", async (c) => {
     suggestions,
     correlationMatrix,
     dataQuality: { symbolsWithData: Object.keys(closesCache).length, candlesPerSymbol: N_CORR, computedAt: new Date().toISOString() },
-  });
-});
-
-// ── Signals (read-only — see quotes.cron.ts for the lightweight signal
-// generator; apiv2's own 439-line signal.generator.ts wasn't ported in full,
-// see the Phase 6 commit notes) ─────────────────────────────────────────────
-aiRoutes.get("/signals", async (c) => {
-  const prisma = getPrisma(c.env);
-  const symbol = c.req.query("symbol");
-  const signals = await prisma.olosSignal.findMany({
-    where: { status: "ACTIVE", ...(symbol ? { symbol } : {}) },
-    orderBy: { confidence: "desc" },
-  });
-  return c.json(signals);
-});
-
-aiRoutes.get("/confidence", async (c) => {
-  const prisma = getPrisma(c.env);
-  const signals = await prisma.olosSignal.findMany({ where: { status: "ACTIVE" } });
-
-  if (!signals.length) {
-    return c.json({ score: null, breakdown: null, status: "SCANNING", message: "Nessun segnale ad alta confidenza al momento.", nextScanInSec: 60, asOf: new Date().toISOString() });
-  }
-
-  const avg = signals.reduce((s, sig) => s + sig.confidence.toNumber(), 0) / signals.length / 100;
-  return c.json({
-    score: avg,
-    breakdown: null,
-    status: "ACTIVE",
-    signalCount: signals.length,
-    asOf: signals[0]!.createdAt.toISOString(),
   });
 });
 

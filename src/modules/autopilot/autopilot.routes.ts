@@ -7,6 +7,36 @@ import type { HonoEnv } from "../../common/types";
 import { AutopilotConfigDto } from "./autopilot.dto";
 
 export const autopilotRoutes = new Hono<HonoEnv>();
+
+// Public (unauthenticated) — must be registered before the "*" auth
+// middleware below, since Hono's onion-model middleware chain only applies
+// to routes matched after a .use() call's registration point. This is the
+// exact path the public homepage calls (/api/v1/autopilot/stats/public),
+// which would otherwise 401 by falling inside this router's own "/autopilot"
+// prefix before ever reaching the separate public-stats.routes.ts module.
+autopilotRoutes.get("/stats/public", async (c) => {
+  const prisma = getPrisma(c.env);
+  const since24h = new Date(Date.now() - 86_400_000);
+
+  const [activeBots, closedTrades24h] = await Promise.all([
+    prisma.autopilotConfig.count({ where: { enabled: true } }),
+    prisma.position.findMany({
+      where: { openedByAutopilot: true, status: "CLOSED", closedAt: { gte: since24h } },
+      select: { pnl: true },
+    }),
+  ]);
+
+  const pnl24h = closedTrades24h.reduce((s, p) => s + p.pnl.toNumber(), 0);
+  const wins = closedTrades24h.filter((p) => p.pnl.toNumber() > 0).length;
+
+  return c.json({
+    activeBots,
+    pnl24h,
+    trades24h: closedTrades24h.length,
+    winRatePct: closedTrades24h.length > 0 ? Math.round((wins / closedTrades24h.length) * 1000) / 10 : null,
+  });
+});
+
 autopilotRoutes.use("*", jwtAuthMiddleware);
 
 const CURRENT_CONSENT_VERSION = "2026-06-30-v1";

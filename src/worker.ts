@@ -9,12 +9,16 @@ import { authRoutes } from "./modules/auth/auth.routes";
 import { configRoutes, tenantRoutes } from "./modules/config/config.routes";
 import { tradingDataRoutes, topLevelMarketRoutes, calendarRoutes } from "./modules/market-data/market-data.routes";
 import { refreshFastQuotes, refreshSlowQuotes } from "./modules/market-data/quotes.cron";
+import { refreshEconomicCalendar } from "./modules/market-data/calendar.cron";
 import { monitorPositions } from "./modules/trading/position-monitor";
 import { tradingRoutes } from "./modules/trading/trading.routes";
 import { walletRoutes, clientRoutes } from "./modules/wallet/wallet.routes";
 import { riskRoutes } from "./modules/risk/risk.routes";
 import { aiRoutes, signalsRoutes } from "./modules/ai/ai.routes";
+import { generateSignals } from "./modules/ai/signal-generator";
 import { autopilotRoutes } from "./modules/autopilot/autopilot.routes";
+import { runAutopilotEngine } from "./modules/autopilot/autopilot-engine";
+import { publicStatsRoutes } from "./modules/public/public-stats.routes";
 import { adminRoutes } from "./modules/admin/admin.routes";
 import { watchlistRoutes } from "./modules/watchlist/watchlist.routes";
 import { complianceRoutes, onboardingRoutes } from "./modules/compliance/compliance.routes";
@@ -121,6 +125,10 @@ app.route("/api/v1/academy", academyRoutes);
 app.route("/api-keys", apiKeyRoutes);
 app.route("/api/v1/api-keys", apiKeyRoutes);
 
+// Unauthenticated, real-DB-backed aggregates for the public homepage.
+app.route("/", publicStatsRoutes);
+app.route("/api/v1", publicStatsRoutes);
+
 export default {
   // Fase 9 — real-time WebSocket gateway. This bypasses Hono entirely: Hono's
   // Context wraps handler return values in a way that rejects status-101
@@ -140,9 +148,14 @@ export default {
     return app.fetch(request, env, ctx);
   },
   scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    // Two cron patterns share this handler (see wrangler.toml) — event.cron
+    // Three cron patterns share this handler (see wrangler.toml) — event.cron
     // tells us which one fired so each runs its own provider(s).
-    const refresh = event.cron === "* * * * *" ? refreshFastQuotes(env) : refreshSlowQuotes(env);
-    ctx.waitUntil(refresh.then(() => monitorPositions(env)));
+    if (event.cron === "* * * * *") {
+      ctx.waitUntil(refreshFastQuotes(env).then(() => monitorPositions(env)));
+    } else if (event.cron === "*/15 * * * *") {
+      ctx.waitUntil(generateSignals(env).then(() => runAutopilotEngine(env)));
+    } else {
+      ctx.waitUntil(Promise.all([refreshSlowQuotes(env), refreshEconomicCalendar(env)]).then(() => monitorPositions(env)));
+    }
   },
 };

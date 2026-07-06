@@ -29,6 +29,10 @@ export class RealtimeHub {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
+    if (request.method === "GET" && url.pathname === "/stats") {
+      return new Response(JSON.stringify({ connections: this.state.getWebSockets().length }), { headers: { "content-type": "application/json" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/broadcast") {
       const body = await request.json<{ type: string; payload: unknown; userId?: string }>();
       const frame = JSON.stringify({ type: body.type, payload: body.payload ?? null });

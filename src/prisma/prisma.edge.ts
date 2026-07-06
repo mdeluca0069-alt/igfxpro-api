@@ -11,6 +11,7 @@ export type Env = {
   TWELVEDATA_API_KEY_4?: string;
   TWELVEDATA_API_KEY_5?: string;
   FINNHUB_API_KEY: string;
+  FRED_API_KEY: string;
   ANTHROPIC_API_KEY: string;
   REALTIME_HUB: DurableObjectNamespace;
 };

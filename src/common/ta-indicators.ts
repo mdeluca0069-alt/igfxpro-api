@@ -14,7 +14,13 @@ export function calcEMA(values: number[], period: number): number[] {
 
 export function calcRSI(values: number[], period = 14): number[] {
   if (values.length < period + 1) return Array(values.length).fill(50);
-  const rsi: number[] = Array(period).fill(50);
+  // gains/losses (derived from values.slice(1)) are one shorter than values —
+  // gains[k] is the change ending at values[k+1]. Padding with period+1
+  // (not period) neutral entries keeps rsi[i] aligned with values[i] for
+  // every i, so rsi.length === values.length (previously off by one: the
+  // array was 1 shorter than the input, silently returning undefined for
+  // the most recent candle when indexed by the same i used for values/ema).
+  const rsi: number[] = Array(period + 1).fill(50);
   const gains = values.slice(1).map((v, i) => Math.max(0, v - values[i]!));
   const losses = values.slice(1).map((v, i) => Math.max(0, values[i]! - v));
   let ag = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
