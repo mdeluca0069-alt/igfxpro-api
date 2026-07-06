@@ -14,26 +14,49 @@ export const autopilotRoutes = new Hono<HonoEnv>();
 // exact path the public homepage calls (/api/v1/autopilot/stats/public),
 // which would otherwise 401 by falling inside this router's own "/autopilot"
 // prefix before ever reaching the separate public-stats.routes.ts module.
+// Shape must match ProfessionalHomepage.tsx's AutopilotStats type exactly
+// (status/activeBots/tradesLast24h/sessionPnl/winRate/recentActivity) — a
+// previous version used different field names (pnl24h/trades24h/winRatePct,
+// no status/recentActivity at all), which crashed the page with "Cannot
+// read properties of undefined (reading 'toFixed')" the moment any UI path
+// tried to read the (nonexistent) field. The frontend only actually reads
+// sessionPnl/tradesLast24h/winRate/recentActivity when status === "REAL",
+// so status must accurately reflect whether there's real data to show.
 autopilotRoutes.get("/stats/public", async (c) => {
   const prisma = getPrisma(c.env);
   const since24h = new Date(Date.now() - 86_400_000);
 
-  const [activeBots, closedTrades24h] = await Promise.all([
+  const [activeBots, closedTrades24h, recentPositions] = await Promise.all([
     prisma.autopilotConfig.count({ where: { enabled: true } }),
     prisma.position.findMany({
       where: { openedByAutopilot: true, status: "CLOSED", closedAt: { gte: since24h } },
       select: { pnl: true },
     }),
+    prisma.position.findMany({
+      where: { openedByAutopilot: true },
+      orderBy: { openedAt: "desc" },
+      take: 5,
+      select: { symbol: true, side: true, status: true, pnl: true, openedAt: true, closedAt: true },
+    }),
   ]);
 
-  const pnl24h = closedTrades24h.reduce((s, p) => s + p.pnl.toNumber(), 0);
+  const sessionPnl = closedTrades24h.reduce((s, p) => s + p.pnl.toNumber(), 0);
   const wins = closedTrades24h.filter((p) => p.pnl.toNumber() > 0).length;
+  const winRate = closedTrades24h.length > 0 ? Math.round((wins / closedTrades24h.length) * 1000) / 10 : 0;
+
+  const recentActivity = recentPositions.map((p) => {
+    const pnl = p.pnl.toNumber();
+    const text = p.status === "CLOSED" ? `${p.side} ${p.symbol} closed ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}` : `${p.side} ${p.symbol} opened`;
+    return { symbol: p.symbol, text, at: (p.closedAt ?? p.openedAt).toISOString() };
+  });
 
   return c.json({
+    status: activeBots > 0 ? "REAL" : "NO_DATA",
     activeBots,
-    pnl24h,
-    trades24h: closedTrades24h.length,
-    winRatePct: closedTrades24h.length > 0 ? Math.round((wins / closedTrades24h.length) * 1000) / 10 : null,
+    tradesLast24h: closedTrades24h.length,
+    sessionPnl,
+    winRate,
+    recentActivity,
   });
 });
 

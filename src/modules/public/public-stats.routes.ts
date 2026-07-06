@@ -73,9 +73,16 @@ publicStatsRoutes.get("/telemetry/health", async (c) => {
   });
 });
 
+// Shape must match ProfessionalHomepage.tsx's ExecStats type exactly
+// (avgExecutionMs/fillRate/avgSlippagePips/settlementSuccessRate) — an
+// earlier version of this endpoint used different field names entirely
+// (avgLatencyMs/fillRatePct/totalFilled/totalRejected), which the frontend
+// silently treated as present-but-undefined and crashed calling .toFixed()
+// on undefined. Any new public-stats field must be checked against its
+// consumer's type before shipping, not just smoke-tested for HTTP 200.
 publicStatsRoutes.get("/execution/stats/public", async (c) => {
   const prisma = getPrisma(c.env);
-  const [filled, rejected, latencySample] = await Promise.all([
+  const [filled, rejected, latencySample, slippageAgg] = await Promise.all([
     prisma.order.count({ where: { status: "FILLED" } }),
     prisma.order.count({ where: { status: "REJECTED" } }),
     prisma.order.findMany({
@@ -84,17 +91,24 @@ publicStatsRoutes.get("/execution/stats/public", async (c) => {
       take: 200,
       orderBy: { createdAt: "desc" },
     }),
+    // Real, and currently always ~0 by construction — MARKET orders fill at
+    // the exact quoted price with no simulated slippage (see trading.routes.ts).
+    prisma.order.aggregate({ where: { status: "FILLED" }, _avg: { slippage: true } }),
   ]);
 
   const latencies = latencySample.map((o) => o.filledAt!.getTime() - o.createdAt.getTime()).filter((ms) => ms >= 0 && ms < 60_000);
-  const avgLatencyMs = latencies.length ? Math.round(latencies.reduce((s, v) => s + v, 0) / latencies.length) : 0;
+  const avgExecutionMs = latencies.length ? Math.round(latencies.reduce((s, v) => s + v, 0) / latencies.length) : 0;
   const total = filled + rejected;
 
   return c.json({
-    avgLatencyMs,
-    fillRatePct: total > 0 ? Math.round((filled / total) * 1000) / 10 : 0,
-    totalFilled: filled,
-    totalRejected: rejected,
+    avgExecutionMs,
+    fillRate: total > 0 ? Math.round((filled / total) * 1000) / 10 : 0,
+    avgSlippagePips: slippageAgg._avg.slippage?.toNumber() ?? 0,
+    // Every FILLED order is written inside one atomic margin/position/fill/
+    // ledger transaction (see trading.routes.ts) — settlement can't
+    // partially succeed, so this is 100 whenever at least one order has
+    // actually filled, not a fabricated number.
+    settlementSuccessRate: filled > 0 ? 100 : 0,
   });
 });
 
