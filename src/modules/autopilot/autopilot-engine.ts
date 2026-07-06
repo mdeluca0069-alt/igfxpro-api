@@ -138,6 +138,7 @@ async function evaluateUser(
     if (result.ok) {
       opened++;
       openSymbols.add(signal.symbol);
+      const decisionReason = `Confidence ${confidencePct.toFixed(0)}% ${side} setup — entered ${quantity} lots @ ${execPrice}`;
       await Promise.all([
         pushToUser(env, config.userId, "order.filled", { orderId: result.orderId, symbol: signal.symbol, side, quantity, fillPrice: execPrice }),
         pushToUser(env, config.userId, "position.opened", {
@@ -158,6 +159,13 @@ async function evaluateUser(
           closedAt: null,
           leverage,
           openedByAutopilot: true,
+        }),
+        // Real record of what autopilot actually did and why — previously
+        // this field was never written by any code path, so the frontend's
+        // "Last AI decision" panel was permanently empty for every account.
+        prisma.autopilotConfig.update({
+          where: { userId: config.userId },
+          data: { lastDecision: { symbol: signal.symbol, action: side, reason: decisionReason, timestamp: new Date().toISOString() } },
         }),
       ]);
       console.log(`[autopilot-engine] user=${config.userId} opened ${side} ${signal.symbol} qty=${quantity}`);
