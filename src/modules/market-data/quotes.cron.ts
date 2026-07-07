@@ -31,15 +31,28 @@ async function upsertAndBroadcast(env: Env, rows: QuoteRow[], label: string): Pr
   }
 
   const prisma = getPrisma(env);
-  await prisma.$transaction(
-    rows.map((r) =>
-      prisma.quote.upsert({
-        where: { symbol: r.symbol },
-        create: r,
-        update: { bid: r.bid, ask: r.ask, mid: r.mid, spread: r.spread, changePct: r.changePct },
-      })
+  // A single bulk UPSERT instead of an N-row $transaction of individual
+  // prisma.quote.upsert() calls — each Prisma upsert builds and round-trips
+  // its own query, and this cron was observed in production tripping
+  // Cloudflare's per-invocation CPU limit (see wrangler.toml notes); this
+  // does the same write in one round trip regardless of how many symbols
+  // are in this batch.
+  const now = new Date();
+  await prisma.$executeRaw`
+    INSERT INTO "Quote" (symbol, bid, ask, mid, spread, "changePct", "updatedAt")
+    SELECT * FROM unnest(
+      ${rows.map((r) => r.symbol)}::text[],
+      ${rows.map((r) => r.bid)}::numeric[],
+      ${rows.map((r) => r.ask)}::numeric[],
+      ${rows.map((r) => r.mid)}::numeric[],
+      ${rows.map((r) => r.spread)}::numeric[],
+      ${rows.map((r) => r.changePct)}::numeric[],
+      ${rows.map(() => now)}::timestamptz[]
     )
-  );
+    ON CONFLICT (symbol) DO UPDATE SET
+      bid = EXCLUDED.bid, ask = EXCLUDED.ask, mid = EXCLUDED.mid,
+      spread = EXCLUDED.spread, "changePct" = EXCLUDED."changePct", "updatedAt" = EXCLUDED."updatedAt"
+  `;
 
   await broadcastAll(env, "market.quotes", rows);
   console.log(`[quotes-cron] ${label} updated ${rows.length} quotes`);

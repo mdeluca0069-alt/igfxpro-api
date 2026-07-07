@@ -151,14 +151,19 @@ export default {
     return app.fetch(request, env, ctx);
   },
   scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    // Three cron patterns share this handler (see wrangler.toml) — event.cron
-    // tells us which one fired so each runs its own provider(s).
+    // Four cron patterns share this handler (see wrangler.toml) — event.cron
+    // tells us which one fired so each runs its own provider(s). Each
+    // pattern gets its own Cron Trigger invocation and CPU budget — kept
+    // deliberately separate after position-monitor chained onto the fast
+    // quote tick was observed tripping Cloudflare's CPU limit in production.
     if (event.cron === "* * * * *") {
-      ctx.waitUntil(refreshFastQuotes(env).then(() => monitorPositions(env)));
+      ctx.waitUntil(refreshFastQuotes(env));
+    } else if (event.cron === "*/2 * * * *") {
+      ctx.waitUntil(monitorPositions(env));
     } else if (event.cron === "*/15 * * * *") {
       ctx.waitUntil(generateSignals(env).then(() => runAutopilotEngine(env)));
     } else {
-      ctx.waitUntil(Promise.all([refreshSlowQuotes(env), refreshEconomicCalendar(env)]).then(() => monitorPositions(env)));
+      ctx.waitUntil(Promise.all([refreshSlowQuotes(env), refreshEconomicCalendar(env)]));
     }
   },
 };

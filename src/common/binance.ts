@@ -5,7 +5,15 @@
 // API key and has no meaningful rate limit at this scale (1200 weight/min;
 // this call costs ~4), so crypto can refresh every Cron tick independently
 // of TwelveData's 800-credit/day budget.
-const BASE_URL = "https://api.binance.com/api/v3/ticker/bookTicker";
+// api.binance.com is Binance's trading API domain, which geo-blocks a chunk
+// of cloud/datacenter IP ranges (including, empirically, Cloudflare Workers'
+// egress here — confirmed via direct comparison: identical requests succeed
+// from an ordinary sandbox but return non-array error bodies from within the
+// deployed Worker). data-api.binance.vision is Binance's dedicated read-only
+// market-data mirror, purpose-built for exactly this kind of public,
+// unauthenticated polling without the trading-API's regional restrictions.
+const MARKET_DATA_HOST = "https://data-api.binance.vision";
+const BASE_URL = `${MARKET_DATA_HOST}/api/v3/ticker/bookTicker`;
 
 export type BinanceQuote = { symbol: string; bid: number; ask: number; mid: number; changePct: number };
 
@@ -38,7 +46,7 @@ export async function fetchBinanceCandles(igSymbol: string, interval: string, li
   if (!bnSymbol) return [];
 
   try {
-    const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${bnSymbol}&interval=${interval}&limit=${limit}`);
+    const res = await fetch(`${MARKET_DATA_HOST}/api/v3/klines?symbol=${bnSymbol}&interval=${interval}&limit=${limit}`);
     const raw = (await res.json()) as unknown;
     if (!Array.isArray(raw)) return [];
 
@@ -82,7 +90,7 @@ export async function fetchBinanceQuotes(symbols: string[]): Promise<Map<string,
   // best-effort (a missing changePct just reads as 0, not a hard failure).
   let changeBySymbol = new Map<string, number>();
   try {
-    const changeRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?${params.toString()}`);
+    const changeRes = await fetch(`${MARKET_DATA_HOST}/api/v3/ticker/24hr?${params.toString()}`);
     const changeJson = (await changeRes.json()) as Array<{ symbol: string; priceChangePercent: string }>;
     if (Array.isArray(changeJson)) {
       changeBySymbol = new Map(changeJson.map((c) => [c.symbol, parseFloat(c.priceChangePercent)]));

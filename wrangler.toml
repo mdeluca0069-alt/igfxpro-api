@@ -17,10 +17,19 @@ tag = "v1"
 new_sqlite_classes = ["RealtimeHub"]
 
 [triggers]
-# Three cadences, dispatched in worker.ts's scheduled handler by event.cron:
+# Four cadences, dispatched in worker.ts's scheduled handler by event.cron:
 #   "* * * * *"    — fast tick: Binance (crypto, free/unlimited) + Finnhub
-#                    (US equities, 60 calls/min free tier, ~35 symbols/tick),
-#                    then position-monitor (SL/TP, pending orders, stop-out).
+#                    (US equities, 60 calls/min free tier, ~35 symbols/tick)
+#                    ONLY. Previously chained position-monitor onto the same
+#                    invocation, which — combined with Prisma/DO-push
+#                    overhead — was observed in production tripping
+#                    Cloudflare's per-invocation CPU limit ("Exceeded CPU
+#                    Limit" in wrangler tail), silently killing BOTH the
+#                    quote refresh AND the SL/TP check together whenever it
+#                    happened. Split out so each gets its own fresh CPU
+#                    budget per Cloudflare Cron Trigger firing.
+#   "*/2 * * * *"  — position-monitor (SL/TP, pending order triggers,
+#                    per-user margin/stop-out check) on its own invocation.
 #   "*/15 * * * *" — signal generator (5 candidate symbols, real RSI/MACD/
 #                    EMA200 TA) + autopilot execution engine. 3 of the 5
 #                    candidates use TwelveData candles (1 credit/call, same
@@ -38,4 +47,4 @@ new_sqlite_classes = ["RealtimeHub"]
 #                    the real economic calendar (FRED).
 #                    (The original single-key */1 * * * * cadence across all
 #                    130 symbols exhausted 162,986/800 daily credits on key 1.)
-crons = ["* * * * *", "*/15 * * * *", "0 * * * *"]
+crons = ["* * * * *", "*/2 * * * *", "*/15 * * * *", "0 * * * *"]
