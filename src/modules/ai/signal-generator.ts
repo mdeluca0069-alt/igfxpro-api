@@ -32,12 +32,21 @@ import { broadcastAll } from "../../common/realtime";
 // The gate logic, ATR-based stop/target construction, and 4-hour per-symbol
 // cooldown are faithful to apiv2's originals.
 
+// Widened from the original 5-symbol list (EURUSD/GBPUSD/XAUUSD/BTCUSD/ETHUSD)
+// now that the 5-key TwelveData rotation exists — a stricter-than-necessary
+// candidate list was the main reason the scanner rarely found a real setup
+// within a scan cycle. Still a fixed reliable-data list, not the full
+// 130-instrument catalog (see module header), just wider.
 const CANDIDATES: Array<{ symbol: string; source: "twelvedata" | "binance" }> = [
   { symbol: "EURUSD", source: "twelvedata" },
   { symbol: "GBPUSD", source: "twelvedata" },
+  { symbol: "USDJPY", source: "twelvedata" },
+  { symbol: "AUDUSD", source: "twelvedata" },
   { symbol: "XAUUSD", source: "twelvedata" },
   { symbol: "BTCUSD", source: "binance" },
   { symbol: "ETHUSD", source: "binance" },
+  { symbol: "SOLUSD", source: "binance" },
+  { symbol: "XRPUSD", source: "binance" },
 ];
 
 const COOLDOWN_MS = 4 * 60 * 60 * 1000;

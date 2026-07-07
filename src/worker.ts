@@ -23,6 +23,7 @@ import { adminRoutes } from "./modules/admin/admin.routes";
 import { watchlistRoutes } from "./modules/watchlist/watchlist.routes";
 import { complianceRoutes, onboardingRoutes } from "./modules/compliance/compliance.routes";
 import { reportsRoutes } from "./modules/reports/reports.routes";
+import { analyticsRoutes } from "./modules/analytics/analytics.routes";
 import { taxRoutes } from "./modules/reports/tax.routes";
 import { paperRoutes } from "./modules/paper/paper.routes";
 import { supportRoutes, supportAdminRoutes } from "./modules/support/support.routes";
@@ -108,6 +109,8 @@ app.route("/api/v1/onboarding", onboardingRoutes);
 
 app.route("/reports", reportsRoutes);
 app.route("/api/v1/reports", reportsRoutes);
+app.route("/analytics", analyticsRoutes);
+app.route("/api/v1/analytics", analyticsRoutes);
 app.route("/tax", taxRoutes);
 app.route("/api/v1/tax", taxRoutes);
 

@@ -52,4 +52,60 @@ export class AutopilotConfigDto {
   @Min(10)
   @Max(100)
   capitalPct?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(180)
+  eventLockMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  maxDailyTrades?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  breakEvenTriggerR?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  trailingStopEnabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  trailingActivationR?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.5)
+  @Max(10)
+  atrTrailMultiple?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  regimeExitEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  maxHoursOpen?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(50)
+  maxDailyLossPct?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  maxSpreadBps?: number;
 }

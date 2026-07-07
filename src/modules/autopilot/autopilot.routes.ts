@@ -5,6 +5,7 @@ import { jwtAuthMiddleware } from "../../common/middleware/jwt-auth.middleware";
 import { validateBody } from "../../common/validate";
 import type { HonoEnv } from "../../common/types";
 import { AutopilotConfigDto } from "./autopilot.dto";
+import { INSTRUMENT_META } from "../../common/instruments";
 
 export const autopilotRoutes = new Hono<HonoEnv>();
 
@@ -80,14 +81,26 @@ const DEFAULTS = {
   blockedSymbols: [] as string[],
   stopDrawdownPct: 10,
   capitalPct: 100,
+  eventLockMinutes: 30,
+  maxDailyTrades: 10,
+  breakEvenTriggerR: 1.0,
+  trailingStopEnabled: true,
+  trailingActivationR: 1.5,
+  atrTrailMultiple: 2.0,
+  regimeExitEnabled: true,
+  maxHoursOpen: 48,
+  maxDailyLossPct: 5.0,
+  maxSpreadBps: 15,
 };
 
-// Ported from apiv2's autopilot-service/autopilot.service.ts config
-// CRUD -- pure Prisma. Note: this only stores the client's automation
-// preferences; nothing currently *reads* this config to actually place
-// autopilot trades (that pipeline depends on the signal generator + a
-// continuous evaluation loop, deferred along with real signal generation --
-// see the Phase 6 commit notes). Config saved here has no live effect yet.
+// Ported from apiv2's autopilot-service/autopilot.service.ts config CRUD —
+// pure Prisma. autopilot-engine.ts (Fase 9 follow-up) reads this every 15
+// minutes and actually places trades; this is no longer inert configuration.
+// The trade-management/safety fields below (eventLockMinutes..maxSpreadBps)
+// already existed on the Prisma model and are read by autopilot-engine.ts,
+// but this GET/POST pair never exposed them — every save silently only
+// persisted the first 8 fields and the frontend's "Trade management"/
+// "Safety limits" panels always showed their local hardcoded defaults.
 autopilotRoutes.get("/config", async (c) => {
   const user = c.get("user")!;
   const prisma = getPrisma(c.env);
@@ -106,6 +119,18 @@ autopilotRoutes.get("/config", async (c) => {
     blockedSymbols: cfg.blockedSymbols,
     stopDrawdownPct: cfg.stopDrawdownPct,
     capitalPct: cfg.capitalPct,
+    eventLockMinutes: cfg.eventLockMinutes,
+    maxDailyTrades: cfg.maxDailyTrades,
+    breakEvenTriggerR: cfg.breakEvenTriggerR,
+    trailingStopEnabled: cfg.trailingStopEnabled,
+    trailingActivationR: cfg.trailingActivationR,
+    atrTrailMultiple: cfg.atrTrailMultiple,
+    regimeExitEnabled: cfg.regimeExitEnabled,
+    maxHoursOpen: cfg.maxHoursOpen,
+    maxDailyLossPct: cfg.maxDailyLossPct,
+    maxSpreadBps: cfg.maxSpreadBps,
+    consentAcceptedAt: cfg.consentAcceptedAt?.toISOString(),
+    dailyLossLockedUntil: cfg.dailyLossLockedUntil?.toISOString(),
     pausedByAdmin: cfg.pausedByAdmin,
     pausedReason: cfg.pausedReason ?? undefined,
     lastDecision: cfg.lastDecision ?? undefined,
@@ -172,40 +197,81 @@ autopilotRoutes.get("/positions", async (c) => {
 
   return c.json({
     ok: true,
-    positions: rows.map((p) => ({
-      id: p.id,
-      symbol: p.symbol,
-      side: p.side,
-      quantity: p.quantity.toNumber(),
-      entryPrice: p.entryPrice.toNumber(),
-      stopLoss: p.stopLoss?.toNumber() ?? null,
-      takeProfit: p.takeProfit?.toNumber() ?? null,
-      pnl: p.pnl.toNumber(),
-      pnlPercent: p.pnlPercent.toNumber(),
-      breakEvenApplied: p.breakEvenApplied,
-      trailingActive: p.trailingActive,
-      openedAt: p.openedAt.toISOString(),
-    })),
+    positions: rows.map((p) => {
+      const entry = p.entryPrice.toNumber();
+      const sl = p.stopLoss?.toNumber() ?? null;
+      const contractSize = INSTRUMENT_META[p.symbol]?.contractSize ?? 1;
+      const riskAmount = sl !== null ? Math.abs(entry - sl) * p.quantity.toNumber() * contractSize : 0;
+      const rMultiple = riskAmount > 0 ? Math.round((p.pnl.toNumber() / riskAmount) * 100) / 100 : null;
+
+      return {
+        id: p.id,
+        symbol: p.symbol,
+        side: p.side,
+        quantity: p.quantity.toNumber(),
+        entryPrice: entry,
+        stopLoss: sl,
+        takeProfit: p.takeProfit?.toNumber() ?? null,
+        pnl: p.pnl.toNumber(),
+        pnlPercent: p.pnlPercent.toNumber(),
+        rMultiple,
+        breakEvenApplied: p.breakEvenApplied,
+        trailingActive: p.trailingActive,
+        openedAt: p.openedAt.toISOString(),
+      };
+    }),
   });
 });
 
-// No real trades have been opened by autopilot yet (the evaluation pipeline
-// that would set openedByAutopilot=true doesn't exist), so this is honestly
-// a zeroed report shape rather than a faithful port of a scoring service.
+// Real report built from actual Position rows tagged openedByAutopilot —
+// previously returned only {totalTrades, winRate, totalPnl, generatedAt},
+// which crashed AutopilotDashboard.tsx at "performance.recentTrades.length"
+// since recentTrades didn't exist. Now matches the frontend's
+// AutopilotPerformance type exactly.
 autopilotRoutes.get("/performance", async (c) => {
   const user = c.get("user")!;
   const prisma = getPrisma(c.env);
-  const closed = await prisma.position.findMany({
-    where: { userId: user.sub, status: "CLOSED", openedByAutopilot: true },
-  });
+
+  const [open, closed] = await Promise.all([
+    prisma.position.findMany({ where: { userId: user.sub, status: "OPEN", openedByAutopilot: true } }),
+    prisma.position.findMany({
+      where: { userId: user.sub, status: "CLOSED", openedByAutopilot: true },
+      orderBy: { closedAt: "desc" },
+    }),
+  ]);
 
   const wins = closed.filter((p) => p.pnl.toNumber() > 0).length;
   const totalPnl = closed.reduce((s, p) => s + p.pnl.toNumber(), 0);
+  const totalPnlOpen = open.reduce((s, p) => s + p.pnl.toNumber(), 0);
+
+  const holdHours = closed
+    .filter((p) => p.closedAt)
+    .map((p) => (p.closedAt!.getTime() - p.openedAt.getTime()) / 3_600_000);
+  const avgHoldHours = holdHours.length ? Math.round((holdHours.reduce((s, h) => s + h, 0) / holdHours.length) * 10) / 10 : null;
+
+  const recentTrades = [...open, ...closed]
+    .sort((a, b) => (b.closedAt ?? b.openedAt).getTime() - (a.closedAt ?? a.openedAt).getTime())
+    .slice(0, 10)
+    .map((p) => ({
+      id: p.id,
+      symbol: p.symbol,
+      side: p.side,
+      pnl: p.pnl.toNumber(),
+      status: p.status,
+      openedAt: p.openedAt.toISOString(),
+      closedAt: p.closedAt?.toISOString() ?? null,
+    }));
 
   return c.json({
-    totalTrades: closed.length,
+    status: open.length + closed.length > 0 ? "REAL" : "NO_DATA",
+    openCount: open.length,
+    closedCount: closed.length,
+    winCount: wins,
     winRate: closed.length ? Math.round((wins / closed.length) * 1000) / 10 : 0,
     totalPnl: Math.round(totalPnl * 100) / 100,
+    totalPnlOpen: Math.round(totalPnlOpen * 100) / 100,
+    avgHoldHours,
+    recentTrades,
     generatedAt: new Date().toISOString(),
   });
 });

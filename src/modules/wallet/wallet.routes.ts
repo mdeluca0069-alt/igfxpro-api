@@ -351,5 +351,15 @@ clientRoutes.post("/documents/upload", async (c) => {
     update: { status: "PENDING_REVIEW", fileName: body.fileName, label: body.label ?? body.documentKey },
   });
 
+  // First document upload opens a real KycCase so it lands in the admin
+  // console's KYC queue (adminRoutes.get("/kyc/cases")) — previously nothing
+  // ever created this row, so approve/reject had no cases to act on and
+  // onboarding status could never leave "pending" for any client.
+  await prisma.kycCase.upsert({
+    where: { userId: user.sub },
+    create: { userId: user.sub, status: "SUBMITTED" },
+    update: {},
+  });
+
   return c.json({ ok: true, document: doc });
 });
