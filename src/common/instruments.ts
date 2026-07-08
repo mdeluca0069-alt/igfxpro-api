@@ -74,7 +74,10 @@ export const INSTRUMENT_META: Record<string, InstrumentMeta> = {
   XRPUSD: { symbol: "XRPUSD", name: "Ripple / US Dollar", assetClass: "CRYPTO", pipSize: 0.0001, contractSize: 1, minLot: 1, maxLot: 100_000, leverage: 2, currency: "USD" },
   LTCUSD: { symbol: "LTCUSD", name: "Litecoin / US Dollar", assetClass: "CRYPTO", pipSize: 0.01, contractSize: 1, minLot: 0.01, maxLot: 1_000, leverage: 2, currency: "USD" },
   SOLUSD: { symbol: "SOLUSD", name: "Solana / US Dollar", assetClass: "CRYPTO", pipSize: 0.01, contractSize: 1, minLot: 0.01, maxLot: 1_000, leverage: 2, currency: "USD" },
-  BNBUSD: { symbol: "BNBUSD", name: "BNB / US Dollar", assetClass: "CRYPTO", pipSize: 0.01, contractSize: 1, minLot: 0.01, maxLot: 500, leverage: 2, currency: "USD" },
+  // BNBUSD removed — not listed on Coinbase (our crypto price source since
+  // Binance's own domains started blocking Cloudflare Workers' egress), so
+  // its quote would go permanently stale with no live price. No open
+  // positions existed on it at removal time.
   ADAUSD: { symbol: "ADAUSD", name: "Cardano / US Dollar", assetClass: "CRYPTO", pipSize: 0.0001, contractSize: 1, minLot: 1, maxLot: 500_000, leverage: 2, currency: "USD" },
   DOTUSD: { symbol: "DOTUSD", name: "Polkadot / US Dollar", assetClass: "CRYPTO", pipSize: 0.0001, contractSize: 1, minLot: 0.1, maxLot: 50_000, leverage: 2, currency: "USD" },
   DOGEUSD: { symbol: "DOGEUSD", name: "Dogecoin / US Dollar", assetClass: "CRYPTO", pipSize: 0.00001, contractSize: 1, minLot: 10, maxLot: 1_000_000, leverage: 2, currency: "USD" },
@@ -175,7 +178,7 @@ export const BROKER_SPREAD_DEFAULTS: Record<string, number> = {
   USDSEK: 0.01, USDDKK: 0.002, USDSGD: 0.0004, USDHKD: 0.0002,
   USDPLN: 0.003, EURTRY: 0.06, GBPTRY: 0.075, EURNOK: 0.01,
   BTCUSD: 30.0, ETHUSD: 1.2, XRPUSD: 0.0003, LTCUSD: 0.15,
-  SOLUSD: 0.08, BNBUSD: 0.2, ADAUSD: 0.0005, DOTUSD: 0.004,
+  SOLUSD: 0.08, ADAUSD: 0.0005, DOTUSD: 0.004,
   DOGEUSD: 0.00005, AVAXUSD: 0.08, LINKUSD: 0.01, UNIUSD: 0.008,
   ATOMUSD: 0.01, MATICUSD: 0.0003, NEARUSD: 0.003,
   US500: 0.8, US100: 1.5, US30: 3.0, DE40: 1.2, UK100: 1.0,
