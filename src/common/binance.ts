@@ -39,32 +39,108 @@ const FROM_BINANCE: Record<string, string> = Object.fromEntries(Object.entries(T
 
 export type BinanceCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
-// Used by the signal generator for real technical-analysis history —
-// Binance's public klines endpoint, no key, no meaningful rate limit.
+const MARKET_DATA_HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; IGFXPRO-MarketData/1.0)", Accept: "application/json" };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// data-api.binance.vision intermittently answers with an HTML block/challenge
+// page (observed status 403) instead of JSON — looks like bot-detection
+// sampling requests from Cloudflare's own network rather than a hard geo-ban
+// (the very same endpoint succeeds on a different attempt seconds later).
+// Retrying a couple of times clears it in practice; this is shared by every
+// Binance call in this file instead of duplicating the retry loop per call.
+async function fetchJsonRetrying(url: string, attempts = 3): Promise<unknown> {
+  let lastError: string = "unknown";
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(250 * i);
+    const res = await fetch(url, { headers: MARKET_DATA_HEADERS });
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      lastError = `status=${res.status} body=${text.slice(0, 150)}`;
+    }
+  }
+  console.error(`[binance] non-JSON response after ${attempts} attempts for ${url}: ${lastError}`);
+  return null;
+}
+
+// Historical candles come from Coinbase Exchange's public API, NOT Binance —
+// unlike bookTicker/24hr (which mostly succeed), data-api.binance.vision's
+// klines endpoint consistently returned an HTML 403 block page from within
+// this Worker even with retries + a browser User-Agent (verified via
+// wrangler tail: 3/3 attempts blocked, every time, on multiple separate
+// deploys) — a persistent WAF rule on that specific endpoint, not the
+// transient/intermittent block bookTicker sees. Coinbase's read-only
+// exchange API needs no key and has been reliable from Workers in testing.
+const COINBASE_HOST = "https://api.exchange.coinbase.com";
+
+const TO_COINBASE_PRODUCT: Record<string, string> = {
+  BTCUSD: "BTC-USD",
+  ETHUSD: "ETH-USD",
+  XRPUSD: "XRP-USD",
+  LTCUSD: "LTC-USD",
+  SOLUSD: "SOL-USD",
+  ADAUSD: "ADA-USD",
+  DOTUSD: "DOT-USD",
+  DOGEUSD: "DOGE-USD",
+  AVAXUSD: "AVAX-USD",
+  LINKUSD: "LINK-USD",
+  UNIUSD: "UNI-USD",
+  ATOMUSD: "ATOM-USD",
+  MATICUSD: "MATIC-USD",
+  NEARUSD: "NEAR-USD",
+  // BNBUSD intentionally absent — Binance Coin isn't listed on Coinbase.
+};
+
+// Coinbase only offers a fixed set of granularities (seconds); anything not
+// listed here falls back to the nearest supported bucket.
+const INTERVAL_TO_GRANULARITY_SEC: Record<string, number> = {
+  "1m": 60,
+  "5m": 300,
+  "15m": 900,
+  "30m": 900,
+  "1h": 3600,
+  "4h": 3600,
+  "6h": 21600,
+  "1d": 86400,
+  "1w": 86400,
+};
+
+// Used by the signal generator for real technical-analysis history, and by
+// the candles chart endpoint for crypto symbols.
 export async function fetchBinanceCandles(igSymbol: string, interval: string, limit: number): Promise<BinanceCandle[]> {
-  const bnSymbol = TO_BINANCE[igSymbol];
-  if (!bnSymbol) return [];
+  const product = TO_COINBASE_PRODUCT[igSymbol];
+  if (!product) return [];
+
+  const granularity = INTERVAL_TO_GRANULARITY_SEC[interval] ?? 3600;
 
   try {
-    const res = await fetch(`${MARKET_DATA_HOST}/api/v3/klines?symbol=${bnSymbol}&interval=${interval}&limit=${limit}`);
-    const raw = (await res.json()) as unknown;
+    const raw = await fetchJsonRetrying(`${COINBASE_HOST}/products/${product}/candles?granularity=${granularity}`);
     if (!Array.isArray(raw)) return [];
 
     return raw
       .map((k): BinanceCandle | null => {
+        // Coinbase candle shape: [time, low, high, open, close, volume] —
+        // a different column order than Binance's klines.
         const arr = k as unknown[];
         const time = Number(arr[0]);
-        const open = parseFloat(String(arr[1]));
-        const high = parseFloat(String(arr[2]));
-        const low = parseFloat(String(arr[3]));
-        const close = parseFloat(String(arr[4]));
-        const volume = parseFloat(String(arr[5]));
+        const low = Number(arr[1]);
+        const high = Number(arr[2]);
+        const open = Number(arr[3]);
+        const close = Number(arr[4]);
+        const volume = Number(arr[5]);
         if (!isFinite(open) || !isFinite(close)) return null;
-        return { time: Math.floor(time / 1000), open, high, low, close, volume: isFinite(volume) ? volume : 0 };
+        return { time, open, high, low, close, volume: isFinite(volume) ? volume : 0 };
       })
-      .filter((c): c is BinanceCandle => c !== null);
+      .filter((c): c is BinanceCandle => c !== null)
+      // Coinbase returns newest-first; every consumer here expects ascending.
+      .sort((a, b) => a.time - b.time)
+      .slice(-Math.min(limit, 300));
   } catch (err) {
-    console.error(`[binance] fetchBinanceCandles ${igSymbol} failed:`, (err as Error).message);
+    console.error(`[coinbase] fetchBinanceCandles ${igSymbol} failed:`, (err as Error).message);
     return [];
   }
 }
@@ -78,8 +154,7 @@ export async function fetchBinanceQuotes(symbols: string[]): Promise<Map<string,
 
   let bookTicker: unknown;
   try {
-    const res = await fetch(`${BASE_URL}?${params.toString()}`);
-    bookTicker = await res.json();
+    bookTicker = await fetchJsonRetrying(`${BASE_URL}?${params.toString()}`);
   } catch (err) {
     console.error("[binance] bookTicker fetch failed:", (err as Error).message);
     return result;
@@ -90,10 +165,9 @@ export async function fetchBinanceQuotes(symbols: string[]): Promise<Map<string,
   // best-effort (a missing changePct just reads as 0, not a hard failure).
   let changeBySymbol = new Map<string, number>();
   try {
-    const changeRes = await fetch(`${MARKET_DATA_HOST}/api/v3/ticker/24hr?${params.toString()}`);
-    const changeJson = (await changeRes.json()) as Array<{ symbol: string; priceChangePercent: string }>;
+    const changeJson = await fetchJsonRetrying(`${MARKET_DATA_HOST}/api/v3/ticker/24hr?${params.toString()}`);
     if (Array.isArray(changeJson)) {
-      changeBySymbol = new Map(changeJson.map((c) => [c.symbol, parseFloat(c.priceChangePercent)]));
+      changeBySymbol = new Map((changeJson as Array<{ symbol: string; priceChangePercent: string }>).map((c) => [c.symbol, parseFloat(c.priceChangePercent)]));
     }
   } catch {
     // non-fatal — changePct defaults to 0 below
